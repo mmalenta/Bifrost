@@ -1,7 +1,10 @@
 #pragma once
+// NEED TO CLEAN THIS MESS INTO ALPHABETICAL ORDER
 #include <tclap/CmdLine.h>
 #include <string>
 #include <iostream>
+#include <ctime>
+#include <vector>
 
 struct CmdLineOptions {
   std::string infilename;
@@ -9,7 +12,7 @@ struct CmdLineOptions {
   std::string killfilename;
   std::string zapfilename;
   int max_num_threads;
-  int gpu_ids;
+  std::vector<int> gpu_ids;
   unsigned int size;
   float dm_start;
   float dm_end;
@@ -63,11 +66,11 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
 
       TCLAP::ValueArg<std::string> arg_zapfilename("z", "zapfile",
                                                    "Birdie list file",
-                                                   false, "", "string",cmd);
+                                                   false, "", "string", cmd);
 
       TCLAP::ValueArg<int> arg_max_num_threads("t", "num_threads",
-                                               "The number of GPUs to use",
-                                               false, 14, "int", cmd);
+	                                            "The number of GPUs to use",
+                                                 false, 14, "int", cmd);
 
       TCLAP::ValueArg<int> arg_limit("", "limit",
 				     "upper limit on number of candidates to write out",

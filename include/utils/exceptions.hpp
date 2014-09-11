@@ -5,14 +5,14 @@
 #include <sstream>
 #include <iostream>
 #include <execinfo.h>
-#include "dedisp.h"
+//#include "dedisp.h"
 #include "cuda.h"
 #include "cuda_runtime.h"
 #include "cufft.h"
 
 class ErrorChecker {
 public:
-  static void check_dedisp_error(dedisp_error error,
+  /*static void check_dedisp_error(dedisp_error error,
 			    std::string function_name)
   {
     if (error != DEDISP_NO_ERROR) {
@@ -23,7 +23,7 @@ public:
 		<< std::endl;
       throw std::runtime_error(error_msg.str());
     }
-  }
+  }*/
   
   static void check_file_error(std::ifstream& infile, std::string filename){
     if(!infile.good()) {
