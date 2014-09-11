@@ -4,6 +4,7 @@
 #include<string>
 #include<unistd.h>
 #include<data_types/filterbank.hpp>
+#include<transforms/dedisperser.hpp>
 #include<utils/cmdline.hpp>
 #include<utils/exceptions.hpp>
 #include<utils/progress_bar.hpp>
@@ -55,17 +56,19 @@ int main(int argc, char* argv[])
 	// NEED TO CHECK IF THE NUMBER OF IDS IS THE SAME AS THE NUMBER OF DEVICES SPECIFIED 
 	// WITH -t COMMAND LINE OPTION (IF ANY)
 
-	if (cudaErrorNoDevice)
+	int device_count;
+	if( cudaSuccess != cudaGetDeviceCount(&device_count))
 		ErrorChecker::throw_error("There are no available CUDA-capable devices"); // exits if there are no devices detected
 	
-	int device_count;
-	cudaGetDeviceCount(&device_count)
-
-
 	cout << "There are " << device_count << " available devices" << endl;
 	
 	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || args.max_num_threads < device_count )
 		ErrorChecker::throw_error("The number of specified IDs must be lower than the number of GPUs available");
+
+	if (args.gpu_ids.empty())
+		for (int i = 0; i < args.max_num_threads; i++) args.gpu_ids.push_back(i);
+
+	int nthreads = args.gpu_ids.size();
 
 	cout << "Devices that will be used: " << endl;
 
@@ -80,7 +83,8 @@ int main(int argc, char* argv[])
 
 	if (args.verbose)
     		std::cout << "Using file: " << args.infilename << std::endl;
-  	std::string filename(args.infilename);
+  	
+	std::string filename(args.infilename);
 
 	if (args.progress_bar)
     		cout << "Reading data from " << args.infilename.c_str() << endl;
@@ -94,12 +98,13 @@ int main(int argc, char* argv[])
     		cout << "Complete (read time: " << timers["reading"].getTime() << "s)" << endl;
   	}
 
-//  	Dedisperser dedisperser(filobj,nthreads);
+  	Dedisperser dedisperser(filobj,nthreads);
+
   	if (args.killfilename!="")
 	{
     		if (args.verbose)
       			std::cout << "Using killfile: " << args.killfilename << std::endl;
-  //  		dedisperser.set_killmask(args.killfilename);
+  		dedisperser.set_killmask(args.killfilename);
   	}
 	
 	return 0;
