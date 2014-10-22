@@ -5,7 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <execinfo.h>
-#include <dedispersion/dedisp.h>
+#include "dedisp.h"
 #include "cuda.h"
 #include "cuda_runtime.h"
 #include "cufft.h"

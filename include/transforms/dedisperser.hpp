@@ -1,5 +1,5 @@
 #pragma once
-#include <dedispersion/dedisp.h>
+#include "dedisp.h"
 #include <cstdlib>
 #include <vector>
 #include <string>
@@ -16,18 +16,20 @@ private:
   unsigned int num_gpus;
   std::vector<float> dm_list;
   std::vector<dedisp_bool> killmask;
-  
+  std::vector<int> gpu_ids;  
+
 public:
-  Dedisperser(Filterbank& filterbank, unsigned int num_gpus=1)
-    :filterbank(filterbank), num_gpus(num_gpus)
+  Dedisperser(Filterbank& filterbank, std::vector<int> gpu_ids, unsigned int num_gpus=1) // new dedisperser constructor using GPU IDs specified by the user
+    :filterbank(filterbank), gpu_ids(gpu_ids), num_gpus(num_gpus)
   {
     killmask.resize(filterbank.get_nchans(),1);
-    dedisp_error error = dedisp_create_plan_multi(&plan,
+    dedisp_error error = dedisp_create_plan_multi(&plan,			// dedisp_create_plan_multi is a part of dedisp library in file dedisp.cu
 						  filterbank.get_nchans(),
 						  filterbank.get_tsamp(),
 						  filterbank.get_fch1(),
 						  filterbank.get_foff(),
-						  num_gpus);
+						  num_gpus,
+						  gpu_ids);
     ErrorChecker::check_dedisp_error(error,"create_plan_multi");
   }
 

@@ -26,10 +26,13 @@
 */
 
 #pragma once
+//#include <cstdint>
+#include <cmath>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 #include "data_types/header.hpp"
 #include "utils/exceptions.hpp"
 
@@ -44,7 +47,7 @@
 class Filterbank {
 protected:
   //Filterbank metadata
-  unsigned char* data; /*!< Pointer to filterbank data.*/ 
+  unsigned char*  data; /*!< Pointer to filterbank data.*/ 
   unsigned int nsamps; /*!< Number of time samples. */ 
   unsigned int nchans; /*!< Number of frequecy channels. */ 
   unsigned char nbits; /*!< Bits per time sample. */ 
@@ -69,6 +72,7 @@ protected:
   Filterbank(unsigned char* data_ptr, unsigned int nsamps,
 	     unsigned int nchans, unsigned char nbits,
 	     float fch1, float foff, float tsamp)
+
     :data(data_ptr),nsamps(nsamps),nchans(nchans),
      nbits(nbits),fch1(fch1),foff(foff),tsamp(tsamp){}
   
@@ -173,7 +177,7 @@ public:
     
     \return The pointer to the filterbank data.
   */
-  virtual unsigned char* get_data(void){return this->data;}
+  virtual unsigned char * get_data(void){return this->data;}
   
   /*!
     \brief Set the filterbank data pointer.
@@ -224,18 +228,116 @@ public:
     // Read the header
     read_header(infile,hdr);
     size_t input_size = (size_t) hdr.nsamples*hdr.nbits*hdr.nchans/8;
-    this->data = new unsigned char [input_size];
+
     infile.seekg(hdr.size, std::ios::beg);
     // Read the data
-    infile.read(reinterpret_cast<char*>(this->data), input_size);
+
+    unsigned char * data_temp = new unsigned char [input_size];
+
+    std::cout << "Reading the file\n";
+    infile.read(reinterpret_cast<char*>(data_temp), input_size);
     // Set the metadata
-    this->nsamps = hdr.nsamples;
     this->nchans = hdr.nchans;
-    this->tsamp = hdr.tsamp;
     this->nbits = hdr.nbits;
     this->fch1 = hdr.fch1;
     this->foff  = hdr.foff;
-  }
+
+    std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
+    std::cout << "The channel bandwidht [MHz]: " << hdr.foff << std::endl;
+    std::cout << "The number of channels: " << hdr.nchans << std::endl;
+
+    //averaging the time samples
+
+    std::cout << "Averaging time samples\n";
+
+    double new_tsamp = (double)(hdr.tsamp * 2.0);
+
+    unsigned int new_nsamples = (hdr.nsamples / 2); // new number of time samples per channel
+
+    size_t new_input_size = (size_t) new_nsamples * hdr.nbits * hdr.nchans / 8;
+
+    unsigned char *data_new = new unsigned char [new_input_size];
+
+    unsigned int nchans = hdr.nchans;
+    unsigned int nsamples = hdr.nsamples;		
+
+    size_t total_nsamples = (size_t) nchans * nsamples;
+
+    unsigned int data_point_1, data_point_2, data_point_3, data_point_4, data_point_5, data_point_6, data_point_7, data_point_8;
+
+    size_t saved = 0;
+
+    for ( size_t current_sample_block = 0; current_sample_block < total_nsamples; current_sample_block+= size_t(nchans * 2))
+    { 
+
+	// the following code will only work if the number of channels can be divided by 8
+	// need to include a check and introduce unrollinf by 2 if the number of channels cannot be divided by 8
+	// no problem for GHRSS though, which makes use of 1024 channels and will make use of 2048 in the future
+
+	for (size_t current_channel = 0; current_channel < nchans; current_channel+=8)
+	{
+                data_point_1 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel] + data_temp[(size_t) current_sample_block + current_channel + nchans]);
+                data_point_2 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 1] + data_temp[(size_t) current_sample_block + current_channel + 1 + nchans]);
+                data_point_3 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 2] + data_temp[(size_t) current_sample_block + current_channel + 2 + nchans]);
+                data_point_4 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 3] + data_temp[(size_t) current_sample_block + current_channel + 3 + nchans]);
+                data_point_5 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 4] + data_temp[(size_t) current_sample_block + current_channel + 4 + nchans]);
+                data_point_6 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 5] + data_temp[(size_t) current_sample_block + current_channel + 5 + nchans]);
+                data_point_7 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 6] + data_temp[(size_t) current_sample_block + current_channel + 6 + nchans]);
+                data_point_8 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 7] + data_temp[(size_t) current_sample_block + current_channel + 7 + nchans]);
+
+		if (data_point_1 > 255)
+			data_point_1 = 255;		
+
+		if (data_point_2 > 255)
+			data_point_2 = 255;
+
+		if (data_point_3 > 255)
+			data_point_3 = 255;
+		
+		if (data_point_4 > 255)
+			data_point_4 = 255;
+	
+		if (data_point_5 > 255)
+			data_point_5 = 255;
+
+		if (data_point_6 > 255)
+			data_point_6 = 255;
+
+		if (data_point_7 > 255)
+			data_point_7 = 255;
+
+		if (data_point_8 > 255)
+			data_point_8 = 255;
+
+		data_new[(size_t) saved + current_channel] = (unsigned char) data_point_1;
+		data_new[(size_t) saved + current_channel + 1] = (unsigned char) data_point_2;
+		data_new[(size_t) saved + current_channel + 2] = (unsigned char) data_point_3;
+		data_new[(size_t) saved + current_channel + 3] = (unsigned char) data_point_4;
+		data_new[(size_t) saved + current_channel + 4] = (unsigned char) data_point_5;
+		data_new[(size_t) saved + current_channel + 5] = (unsigned char) data_point_6;
+		data_new[(size_t) saved + current_channel + 6] = (unsigned char) data_point_7;
+		data_new[(size_t) saved + current_channel + 7] = (unsigned char) data_point_8;
+
+
+	}
+
+        saved += nchans;
+
+    }
+
+   delete [] data_temp;		// cleaning
+
+   this->nsamps = new_nsamples;
+   this->tsamp  = new_tsamp;
+   this->data   = data_new;   
+
+   std::cout << (int)this->data[0] << std::endl;
+   std::cout << this->tsamp << std::endl;
+
+   std::cout << "Finished averaging time samples!\n";
+
+   }
+
   
   /*!
     \brief Deconstruct a SigprocFilterbank object.
