@@ -2,6 +2,9 @@
 #include <data_types/fourierseries.hpp>
 #include <data_types/candidates.hpp>
 #include <data_types/filterbank.hpp>
+#include <pipeline/default_params.hpp>
+#include <pipeline/pipeline_types.hpp>
+#include <pipeline/pipeline.hpp>
 #include <transforms/dedisperser.hpp>
 #include <transforms/resampler.hpp>
 #include <transforms/folder.hpp>
@@ -27,6 +30,7 @@
 #include <unistd.h>
 #include "cuda.h"
 #include "cufft.h"
+#include "dedisp.h"
 #include "pthread.h"
 #include <cmath>
 #include <map>
@@ -287,6 +291,7 @@ int main(int argc, char* argv[])
 		3. USE 4 DIFFERENT VERBOSITY LEVELS FROM HEIMDAL - USE MultiSwitchArg
 		4. INCLUDED FROM HEIMDALL: -k (use PSRDADA hexadecimal key), -s
 		(scrunching), -
+		5. MAKE IT POSSIBLE TO CHOOSE BETWEEN PULSAR DETECTION, SINGLE PULSE DETECTION OR BOTH (DEFAULT)
 
 	#####################################################################*/
 
@@ -294,7 +299,7 @@ int main(int argc, char* argv[])
 	if (!read_cmdline_options(args,argc,argv))
     		ErrorChecker::throw_error("Failed to parse command line arguments.");
 
-	//COPY THE CODE FROM PSRGPU1 FOR DIFFERENT GPU IDS
+	//COPY THE CODE FROM PSRGPU1 FOR DIFFERENT GPU IDS - DONE
 
 	std::vector<int>::iterator iter_gpu_ids;
 
@@ -315,7 +320,9 @@ int main(int argc, char* argv[])
         	std::cout << "Device " << i << ": " <<  properties.name << std::endl;
    	}
 
-	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || args.max_num_threads < device_count )
+	cout << "Number of devices requested: " << args.max_num_threads << endl;
+	cout << "Number of IDs entered: " << args.gpu_ids.size() << endl;
+	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || device_count < args.max_num_threads )
 		ErrorChecker::throw_error("The number of specified IDs must be lower than the number of GPUs available");
 
 	if (args.gpu_ids.empty())
@@ -388,7 +395,7 @@ int main(int argc, char* argv[])
         }
 
     	std::cout << "Generating DM list" << std::endl;
-	// I don't like the fact there are so many methods in the dedisperser class - use heimdall example of making it simpler
+	// I don't like the fact there are so many methods in the dedisperser class - use heimdall example of making it simpler later
   	dedisperser.generate_dm_list(args.dm_start,args.dm_end,args.dm_pulse_width,args.dm_tol);
   	std::vector<float> dm_list = dedisperser.get_dm_list();
 
@@ -411,74 +418,161 @@ int main(int argc, char* argv[])
   	timers["dedispersion"].stop();
 
   	if (args.progress_bar)
-    	std::cout << "Dedispersion execution time: " << timers["dedispersion"].getTime() << "s\n";
+	    	std::cout << "Dedispersion execution time: " << timers["dedispersion"].getTime() << "s\n";
 
-	std::cout << "Pulsar searching starts here\n";
+	if( args.pulsar_search || args.both_search)
+	{
 
-	unsigned int size;
-  	if (args.size==0)
-    		size = Utils::prev_power_of_two(filobj.get_nsamps());
-  	else
-    		size = args.size;
-  	if (args.verbose)
-    		std::cout << "Setting transform length to " << size << " points" << std::endl;
-  
-  	AccelerationPlan acc_plan(args.acc_start, args.acc_end, args.acc_tol,
-			    args.acc_pulse_width, size, filobj.get_tsamp(),
-			    filobj.get_cfreq(), filobj.get_foff()); 
-  
-  
-  	//Multithreading commands
-  	timers["searching"].start();
-  	std::vector<Worker*> workers(nthreads);
-  	std::vector<pthread_t> threads(nthreads);
-  	DMDispenser dispenser(trials);
-  	if (args.progress_bar)
-    		dispenser.enable_progress_bar();
-  
-  	for (int ii=0;ii<nthreads;ii++){
-    		workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,ii));
-    		pthread_create(&threads[ii], NULL, launch_worker_thread, (void*) workers[ii]);
-  	}
-  
-  	DMDistiller dm_still(args.freq_tol,true);
-  	HarmonicDistiller harm_still(args.freq_tol,args.max_harm,true,false);
-  	CandidateCollection dm_cands;
-  	for (int ii=0; ii<nthreads; ii++){
-    		pthread_join(threads[ii],NULL);
-    		dm_cands.append(workers[ii]->dm_trial_cands.cands);
-  	}
-  	timers["searching"].stop();
-  
-  	if (args.verbose)
-    		std::cout << "Distilling DMs" << std::endl;
-  	dm_cands.cands = dm_still.distill(dm_cands.cands);
-  	dm_cands.cands = harm_still.distill(dm_cands.cands);
-  
-  	CandidateScorer cand_scorer(filobj.get_tsamp(),filobj.get_cfreq(), filobj.get_foff(),
-			      fabs(filobj.get_foff())*filobj.get_nchans());
- 	 cand_scorer.score_all(dm_cands.cands);
+		std::cout << "Pulsar searching starts here\n";
 
-  	if (args.verbose)
-    		std::cout << "Setting up time series folder" << std::endl;
-  
-  	MultiFolder folder(dm_cands.cands,trials);
-  	timers["folding"].start();
-  	if (args.progress_bar)
-    		folder.enable_progress_bar();
+		unsigned int size;
+  		if (args.size==0)
+    			size = Utils::prev_power_of_two(filobj.get_nsamps());
+  		else
+    			size = args.size;
+  		if (args.verbose)
+    			std::cout << "Setting transform length to " << size << " points" << std::endl;
 
-  	if (args.npdmp > 0){
-    		if (args.verbose)
-      			std::cout << "Folding top "<< args.npdmp <<" cands" << std::endl;
-    		folder.fold_n(args.npdmp);
-  	}
-  	timers["folding"].stop();
-
-	std::cout << "Finished pulsar searching\n";
-	std::cout << "Single pulse searching start here\n";
+  		AccelerationPlan acc_plan(args.acc_start, args.acc_end, args.acc_tol,
+			    	args.acc_pulse_width, size, filobj.get_tsamp(),
+			    	filobj.get_cfreq(), filobj.get_foff()); 
 
 
+  		//Multithreading commands
+  		timers["searching"].start();
+  		std::vector<Worker*> workers(nthreads);
+  		std::vector<pthread_t> threads(nthreads);
+  		DMDispenser dispenser(trials);
+  		if (args.progress_bar)
+    			dispenser.enable_progress_bar();
+
+  		for (int ii=0;ii<nthreads;ii++){
+    			workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,ii));
+    			pthread_create(&threads[ii], NULL, launch_worker_thread, (void*) workers[ii]);
+  		}
+
+  		DMDistiller dm_still(args.freq_tol,true);
+  		HarmonicDistiller harm_still(args.freq_tol,args.max_harm,true,false);
+  		CandidateCollection dm_cands;
+  		for (int ii=0; ii<nthreads; ii++){
+    			pthread_join(threads[ii],NULL);
+    			dm_cands.append(workers[ii]->dm_trial_cands.cands);
+  		}
+  		timers["searching"].stop();
+
+  		if (args.verbose)
+    			std::cout << "Distilling DMs" << std::endl;
+  		dm_cands.cands = dm_still.distill(dm_cands.cands);
+  		dm_cands.cands = harm_still.distill(dm_cands.cands);
+
+  		CandidateScorer cand_scorer(filobj.get_tsamp(),filobj.get_cfreq(), filobj.get_foff(),
+			      	fabs(filobj.get_foff())*filobj.get_nchans());
+ 	 	cand_scorer.score_all(dm_cands.cands);
+
+  		if (args.verbose)
+    			std::cout << "Setting up time series folder" << std::endl;
+
+  		MultiFolder folder(dm_cands.cands,trials);
+  		timers["folding"].start();
+  		if (args.progress_bar)
+    			folder.enable_progress_bar();
+
+  		if (args.npdmp > 0){
+    			if (args.verbose)
+      				std::cout << "Folding top "<< args.npdmp <<" cands" << std::endl;
+    			folder.fold_n(args.npdmp);
+  		}
+  		timers["folding"].stop();
+
+		if (args.verbose)
+  			std::cout << "Writing output files" << std::endl;
+
+		int new_size = std::min(args.limit,(int) dm_cands.cands.size());
+		dm_cands.cands.resize(new_size);
+
+		CandidateFileWriter cand_files(args.outdir);
+		cand_files.write_binary(dm_cands.cands,"pulsar_candidates.peasoup");
+
+		OutputFileWriter stats;
+		stats.add_misc_info();
+		stats.add_header(filename);
+		stats.add_search_parameters(args);
+		stats.add_dm_list(dm_list);
+
+		std::vector<float> acc_list;
+		acc_plan.generate_accel_list(0.0,acc_list);
+		stats.add_acc_list(acc_list);
+
+		stats.add_gpu_info(args.gpu_ids);
+		stats.add_candidates(dm_cands.cands,cand_files.byte_mapping);
+		timers["total"].stop();
+		stats.add_timing_info(timers);
+
+		std::stringstream xml_filepath;
+		xml_filepath << args.outdir << "/" << "pulsar_search_overview.xml";
+		stats.to_file(xml_filepath.str());
+
+		std::cout << "Finished pulsar searching\n";
+
+	}
+
+	if( args.single_pulse_search || args.both_search )
+	{
+
+		std::cout << "Single pulse searching starts here\n";
+
+		std::cout << "Heimdall, open the Bifrost!!\n";
+		// because Bifrost opening Heimdall sounds wrong
+
+		
+		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
+		// don't really need the whole hd_create_pipeline in use as it only does the dedisp steps prior to the
+		// dedispersion such as creating dm list etc.
+		hd_params params;
+		hd_set_default_params(&params);
+
+		// copy command line options from args to params - due this ugly way now, put in the function later
+		
+		params.verbosity = 4; // set the maximum verbosity level, so we can have as much information as possible
+		params.sigproc_file = args.infilename;
+		params.dm_min = args.dm_start;
+		params.dm_max = args.dm_end;
+		params.dm_tol = args.dm_tol;
+		params.dm_pulse_width = args.dm_pulse_width;	// expected intrinsic pulse width
+		params.dm_nbits = 8;				// not sure what it does, but safer to keep same as input data
+		params.use_scrunching =  true;
+		params.gpu_id = 0; 				// need to work on this to enable multi-GPU support
+		params.detect_thresh = 10.0;
+		params.f0 = filobj.get_fch1();
+		params.df = filobj.get_foff();
+		params.dt = filobj.get_tsamp();
+		params.nchans = filobj.get_nchans();
+		//params.utc_start = filobj_get_utc_start();	// leave for now
+		params.spectra_per_second = (double) 1.0/(double)params.dt;
+
+		size_t nsamps_gulp = params.nsamps_gulp;
+
+		hd_pipeline pipeline;
+		hd_error error;
+
+		dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
+
+		//pipeline->set_dedispersion_plan(&original_plan);
+
+		error = hd_create_pipeline(&pipeline, original_plan, params);
+
+		if ( error != HD_NO_ERROR)
+		{
+			std::cerr << "ERROR: pipeline creation failed!!" << std::endl;
+			return 1;
+		}
+
+		std::cout << "Pipeline created successfully!!" << std::endl << "Beginning data processing for " << nsamps_gulp
+				<< " samples " << std::endl;
+
+		error = hd_execute(evndakvjnbscvjbsav);
+
+	}
 	return 0;
 }
-
 

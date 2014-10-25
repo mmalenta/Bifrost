@@ -36,13 +36,16 @@ struct CmdLineOptions {
   bool progress_bar;
   //int dada_id; dada_id is hexadecimal, will look into TCLAP interpretation of hexes
   bool scrunch;
+  bool pulsar_search;
+  bool single_pulse_search;
+  bool both_search;
 };
 
 std::string get_utc_str()
 {
   char buf[128];
   std::time_t t = std::time(NULL);
-  std::strftime(buf, 128, "./%Y-%m-%d-%H:%M_peasoup/", std::gmtime(&t));
+  std::strftime(buf, 128, "./%Y-%m-%d-%H:%M_bifrost/", std::gmtime(&t));
   return std::string(buf);
 }
 
@@ -158,6 +161,12 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
 
       TCLAP::SwitchArg arg_progress_bar("p", "progress_bar", "Enable progress bar for DM search", cmd);
 
+      TCLAP::SwitchArg arg_pulsar_search("", "pulsar", "Enable pulsar searching", cmd);
+
+      TCLAP::SwitchArg arg_single_pulse_search("", "single", "Enable single pulse search", cmd);
+
+      TCLAP::SwitchArg arg_both_search("", "both", "Enable search for both pulsar and single pulse search", cmd);
+
       cmd.parse(argc, argv);
       args.infilename        = arg_infilename.getValue();
       args.outdir            = arg_outdir.getValue();
@@ -187,7 +196,9 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
       args.verbose           = arg_verbose.getValue();
       args.scrunch	     = arg_scrunch.getValue();      
       args.progress_bar      = arg_progress_bar.getValue();
-
+      args.pulsar_search     = arg_pulsar_search.getValue();
+      args.single_pulse_search = arg_single_pulse_search.getValue();
+      args.both_search       = arg_both_search.getValue();
     }catch (TCLAP::ArgException &e) {
     std::cerr << "Error: " << e.error() << " for arg " << e.argId()
               << std::endl;

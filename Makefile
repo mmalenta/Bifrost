@@ -23,14 +23,14 @@ NVCCFLAGS  = ${UCFLAGS} ${OPTIMISE} ${NVCC_COMP_FLAGS} --machine 64 -Xcompiler $
 CFLAGS    = ${UCFLAGS} -fPIC ${OPTIMISE} ${DEBUG}
 
 OBJECTS   = ${OBJ_DIR}/kernels.o
-EXE_FILES = ${BIN_DIR}/peasoup #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
+EXE_FILES = ${BIN_DIR}/bifrost #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
 
 all: directories ${OBJECTS} ${EXE_FILES}
 
 ${OBJ_DIR}/kernels.o: ${SRC_DIR}/kernels.cu
 	${NVCC} -c ${NVCCFLAGS} ${INCLUDE} $<  -o $@
 
-${BIN_DIR}/peasoup: ${SRC_DIR}/bifrost.cu ${OBJECTS}
+${BIN_DIR}/bifrost: ${SRC_DIR}/bifrost.cu ${SRC_DIR}/pipeline_heimdall.cu ${OBJECTS}
 	${NVCC} ${NVCCFLAGS} ${INCLUDE} ${LIBS} $^ -o $@
 
 ${BIN_DIR}/harmonic_sum_test: ${SRC_DIR}/harmonic_sum_test.cpp ${OBJECTS}

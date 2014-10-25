@@ -32,6 +32,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <ctime>
 #include <vector>
 #include "data_types/header.hpp"
 #include "utils/exceptions.hpp"
