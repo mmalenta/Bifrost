@@ -10,7 +10,7 @@
 #include <pipeline/pipeline_types.hpp>
 #include <pipeline/params.hpp>
 #include <pipeline/error.hpp>
-#include <utils/cmdline.hpp>
+//#include <utils/cmdline.hpp>
 #include <data_types/filterbank.hpp>
 
 hd_error hd_create_pipeline(hd_pipeline* pipeline, dedisp_plan original_plan, hd_params params); //CmdLineOptions& args, Filterbank& filterbank_obj);

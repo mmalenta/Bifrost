@@ -15,7 +15,7 @@ using std::endl;
 #include <iomanip>
 #include <string>
 #include <fstream>
-#include <utils/cmdline.hpp>
+//#include <utils/cmdline.hpp>
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
@@ -43,6 +43,7 @@ using thrust::device_vector;
 #include <network/client_socket.hpp>
 #include <network/socket_exception.hpp>
 #include <utils/stopwatch.hpp>         // For benchmarking
+#include <utils/exceptions.hpp>
 //#include "write_time_series.h" // For debugging
 
 #include <dedisp.h>
@@ -185,7 +186,8 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 			pipeline->params.scrunch_tol);
 		if( derror != DEDISP_NO_ERROR )
 		{
-			return throw_dedisp_error(derror);
+			ErrorChecker::check_dedisp_error(derror,"enable_adaptive_dt");
+			//return throw_dedisp_error(derror);
 		}
 	}
 

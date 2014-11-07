@@ -1,5 +1,4 @@
 #pragma once
-// NEED TO CLEAN THIS MESS INTO ALPHABETICAL ORDER
 #include <tclap/CmdLine.h>
 #include <string>
 #include <iostream>

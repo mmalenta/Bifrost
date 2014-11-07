@@ -38,6 +38,7 @@
 using std::cin;
 using std::cout;
 using std::endl;
+using std::cerr;
 
 class DMDispenser {
 private:
@@ -551,6 +552,8 @@ int main(int argc, char* argv[])
 		params.spectra_per_second = (double) 1.0/(double)params.dt;
 
 		size_t nsamps_gulp = params.nsamps_gulp;
+		size_t nbits = filobj.get_nbits();
+		size_t stride = stride = (params.nchans * nbits) / (8 * sizeof(char));
 
 		hd_pipeline pipeline;
 		hd_error error;
@@ -570,9 +573,122 @@ int main(int argc, char* argv[])
 		std::cout << "Pipeline created successfully!!" << std::endl << "Beginning data processing for " << nsamps_gulp
 				<< " samples " << std::endl;
 
-		error = hd_execute(evndakvjnbscvjbsav);
+		if ( params.verbosity >= 2)
+			cout << "allocating filterbank data vector for " << nsamps_gulp
+				<< " samples with size " << (nsamps_gulp * stride) << " bytes" << endl;
+		// hd_byte is unsigned char
+		std::vector<hd_byte> filterbank(nsamps_gulp * stride);
 
-	}
+		size_t total_nsamps = 0;
+  		size_t nsamps_read = filobj.get_data_range(nsamps_gulp, &filterbank[0]);
+
+		cout << "Testing the data:" << endl << "filterbank[0]: " << filterbank[0] << endl << "filterbank[1]: "
+			<< filterbank[1] << endl;
+
+  		// copy nsamps_gulp from input data into filterbank vector
+  		// nsamps_gulp is the gulp of time samples
+  		// need space for nsamps_gulp * stride - in GRMT data case, stride = nchans
+  		// some data will be stread along e.g. 2 cells in array (16-bit data)
+  		// stride is pretty much the number of bytes required to get one time sample from all channels
+		
+  		// nsamps_read = bytes_read / nchan_bytes - number of time samples actually read
+  		// will usually equal to nsamps_gulp, but can be lower because there might be less
+  		// time samples than nsamps_gulp
+  		size_t overlap = 0;
+		bool stop_requested = false;  		
+
+
+		while( nsamps_read && !stop_requested )
+		{
+    		
+    			if ( params.verbosity >= 1 )
+			{
+      				cout << "Executing pipeline on new gulp of " << nsamps_read
+           				<< " samples..." << endl;
+    			}
+    			//pipeline_timer.start();
+      			
+    			hd_size nsamps_processed;
+			
+    			// will have to figure out what nsamps_processed is
+    			// *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
+    			// hd_size nsamps_computed  = nsamps - dedisp_get_max_delay(pl->dedispersion_plan);
+    			// where nsamps is nsamps_read + overlap
+			
+			// nsamps_read+overlap makes sure nsamps_read and nsamps_processed is the same
+
+    			error = hd_execute(pipeline, &filterbank[0], nsamps_read+overlap, nbits,
+                       			total_nsamps, &nsamps_processed);
+
+    			if (error == HD_NO_ERROR)
+    			{
+      				if (params.verbosity >= 1)
+        				cout << "Processed " << nsamps_processed << " samples." << endl;
+    			}
+    			else if (error == HD_TOO_MANY_EVENTS) 
+    			{
+      				if (params.verbosity >= 1)
+        				cerr << "WARNING: hd_execute produces too many events, some data skipped" << endl;
+    			}
+    			else 
+    			{
+      				cerr << "ERROR: Pipeline execution failed" << endl;
+      				cerr << "       " << hd_get_error_string(error) << endl;
+      				hd_destroy_pipeline(pipeline);
+      				return -1;
+    			}
+			
+    			//pipeline_timer.stop();
+    			//cout << "pipeline time: " << pipeline_timer.getTime() << " of " << (nsamps_read+overlap) * tsamp << endl;
+    			//pipeline_timer.reset();
+			
+    			total_nsamps += nsamps_processed;
+    			// Now we must 'rewind' to do samples that couldn't be processed
+    			// Note: This assumes nsamps_gulp > 2*overlap
+			// copy non-processed data to the start of the vector
+    			std::copy(&filterbank[nsamps_processed * stride],
+              			&filterbank[(nsamps_read+overlap) * stride],
+              			&filterbank[0]);
+
+			// nsamps_gulp will stay the same - we don't change it anywhere
+    			// will read bit less data than the first time
+    			overlap += nsamps_read - nsamps_processed;
+			// read some new data - but don't read data that has been read before and not
+			// processed, as it has already been read therefore start writing to vector
+			// at position overlap * stride as the data before that already exists
+    			nsamps_read = filobj.get_data_range(nsamps_gulp - overlap,
+                                        			&filterbank[overlap*stride]);
+			
+    			// at the end of data, never execute the pipeline
+    			// won't execute even if some data read - enough to have less than nsamps_gulp - overlap
+			// so total_nsamps might not be equal to the number of time samples in one channel
+			if (nsamps_read < nsamps_gulp - overlap)
+      				stop_requested = 1;
+			
+  		}
+    		
+  		if( params.verbosity >= 1 )
+		{
+    			cout << "Successfully processed a total of " << total_nsamps
+         			<< " samples." << endl;
+  		}
+    		
+  		if( params.verbosity >= 1 )
+		{
+    			cout << "Shutting down..." << endl;
+  		}
+  		
+  		hd_destroy_pipeline(pipeline);
+  		
+  		if( params.verbosity >= 1 )
+		{
+	    		cout << "All done." << endl;
+  		}
+		
+	} // end of the single pulse search if-statement
+	
+	cout << "Finished the program execution" << endl;
+
 	return 0;
 }
 

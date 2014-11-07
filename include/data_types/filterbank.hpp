@@ -26,6 +26,7 @@
 */
 
 #pragma once
+#include <algorithm>
 //#include <cstdint>
 #include <cmath>
 #include <string>
@@ -36,7 +37,7 @@
 #include <vector>
 #include "data_types/header.hpp"
 #include "utils/exceptions.hpp"
-
+#include <pipeline/pipeline_types.hpp>
 /*!
   \brief Base class for handling filterbank data.
 
@@ -180,6 +181,15 @@ public:
   */
   virtual unsigned char * get_data(void){return this->data;}
   
+  virtual size_t get_data_range(size_t nsamps, hd_byte *vector_data)
+  {
+//	std::cout << "Testing:" << std::endl << "data[0]" << this->data[0] << std::endl << "data[1]" << this->data[1] << std::endl;
+	size_t nchan_bytes = (nchans * nbits) / (8 * sizeof(char));
+	std::copy(data, data + (nsamps * nchan_bytes), vector_data);
+	size_t bytes_read = nsamps * nchan_bytes;	// for now
+	return bytes_read / nchan_bytes;
+  }
+
   /*!
     \brief Set the filterbank data pointer.
 
