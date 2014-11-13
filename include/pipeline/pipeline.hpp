@@ -16,6 +16,6 @@
 hd_error hd_create_pipeline(hd_pipeline* pipeline, dedisp_plan original_plan, hd_params params); //CmdLineOptions& args, Filterbank& filterbank_obj);
 hd_error hd_execute(hd_pipeline pipeline,
                     const hd_byte* filterbank, hd_size nsamps, hd_size nbits,
-                    hd_size first_idx, hd_size* nsamps_processed);
+                    hd_size first_idx, hd_size* nsamps_processed, unsigned char* timeseries_data, size_t original_nsamps);
 void     hd_destroy_pipeline(hd_pipeline pipeline);
 

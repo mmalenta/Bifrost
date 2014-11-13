@@ -449,6 +449,8 @@ public:
   {
     dm_list.swap(dm_list_in);
   }
+
+	size_t get_dm_list_size(void){ return dm_list.size(); }
   
   /*!
     \brief Select the Nth timeseries.

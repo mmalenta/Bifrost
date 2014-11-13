@@ -2,6 +2,7 @@
 #include <data_types/fourierseries.hpp>
 #include <data_types/candidates.hpp>
 #include <data_types/filterbank.hpp>
+#include <pipeline/error.hpp>
 #include <pipeline/default_params.hpp>
 #include <pipeline/pipeline_types.hpp>
 #include <pipeline/pipeline.hpp>
@@ -416,6 +417,19 @@ int main(int argc, char* argv[])
  	 PUSH_NVTX_RANGE("Dedisperse",3)
   	DispersionTrials<unsigned char> trials = dedisperser.dedisperse();
   	POP_NVTX_RANGE
+
+	unsigned int output_samps = trials.get_nsamps();
+
+	size_t dm_size = trials.get_dm_list_size();
+
+	size_t output_size = output_samps * dm_size;
+
+	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
+
+	timeseries_data_ptr = trials.get_data();
+
+	cout << "First data test: " << timeseries_data_ptr[0] << " " << timeseries_data_ptr[1] << endl;
+	
   	timers["dedispersion"].stop();
 
   	if (args.progress_bar)
@@ -525,6 +539,7 @@ int main(int argc, char* argv[])
 		std::cout << "Heimdall, open the Bifrost!!\n";
 		// because Bifrost opening Heimdall sounds wrong
 
+		cout << "Second data test: " << timeseries_data_ptr[0] << " " << timeseries_data_ptr[1] << endl;
 		
 		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
 		// don't really need the whole hd_create_pipeline in use as it only does the dedisp steps prior to the
@@ -554,6 +569,8 @@ int main(int argc, char* argv[])
 		size_t nsamps_gulp = params.nsamps_gulp;
 		size_t nbits = filobj.get_nbits();
 		size_t stride = stride = (params.nchans * nbits) / (8 * sizeof(char));
+
+		size_t original_samples = filobj.get_nsamps();
 
 		hd_pipeline pipeline;
 		hd_error error;
@@ -608,7 +625,7 @@ int main(int argc, char* argv[])
     			}
     			//pipeline_timer.start();
       			
-    			hd_size nsamps_processed;
+    			hd_size nsamps_processed = 0;
 			
     			// will have to figure out what nsamps_processed is
     			// *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
@@ -618,12 +635,12 @@ int main(int argc, char* argv[])
 			// nsamps_read+overlap makes sure nsamps_read and nsamps_processed is the same
 
     			error = hd_execute(pipeline, &filterbank[0], nsamps_read+overlap, nbits,
-                       			total_nsamps, &nsamps_processed);
+                       			total_nsamps, &nsamps_processed, timeseries_data_ptr, original_samples);
 
     			if (error == HD_NO_ERROR)
     			{
       				if (params.verbosity >= 1)
-        				cout << "Processed " << nsamps_processed << " samples." << endl;
+       				cout << "Processed " << nsamps_processed << " samples." << endl;
     			}
     			else if (error == HD_TOO_MANY_EVENTS) 
     			{

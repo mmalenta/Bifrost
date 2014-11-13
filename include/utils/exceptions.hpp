@@ -10,6 +10,29 @@
 #include "cuda_runtime.h"
 #include "cufft.h"
 
+typedef int hd_error;
+enum
+{
+	HD_NO_ERROR = 0,
+  	HD_MEM_ALLOC_FAILED,
+	HD_MEM_COPY_FAILED,
+ 	HD_INVALID_DEVICE_INDEX,
+  	HD_DEVICE_ALREADY_SET,
+  	HD_INVALID_PIPELINE,
+  	HD_INVALID_POINTER,
+  	HD_INVALID_STRIDE,
+  	HD_INVALID_NBITS,
+  	HD_PRIOR_GPU_ERROR,
+  	HD_INTERNAL_GPU_ERROR,
+  	HD_TOO_MANY_EVENTS,
+  	HD_UNKNOWN_ERROR
+};
+
+static hd_error throw_error_heimdall(hd_error error) 
+{
+	return error;
+}
+
 class ErrorChecker {
 public:
   static void check_dedisp_error(dedisp_error error,
@@ -150,4 +173,5 @@ public:
       free(strings);
     }
   }
+
 };

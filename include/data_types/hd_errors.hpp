@@ -1,5 +1,4 @@
 #pragma once
-
 typedef int hd_error;
 enum {
   HD_NO_ERROR = 0,

@@ -39,7 +39,6 @@ using thrust::device_vector;
 #include <pipeline/merge_candidates.hpp>
 
 #include <data_types/data_source.hpp>
-#include <data_types/hd_errors.hpp>
 #include <network/client_socket.hpp>
 #include <network/socket_exception.hpp>
 #include <utils/stopwatch.hpp>         // For benchmarking
@@ -146,7 +145,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 	smart_pipeline_ptr pipeline = smart_pipeline_ptr(new hd_pipeline_t());
 	if( !pipeline.get() )
 	{
-		return throw_error(HD_MEM_ALLOC_FAILED);
+		return throw_error_heimdall(HD_MEM_ALLOC_FAILED);
 	}
 
 //	pipeline->params = params;
@@ -161,7 +160,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 	hd_error error = allocate_gpu(pipeline.get());
 	if( error != HD_NO_ERROR )
 	{
-		return throw_error(error);
+		return throw_error_heimdall(error);
 	}
 
 	if( params.verbosity >= 3 )
@@ -211,7 +210,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 
 hd_error hd_execute(hd_pipeline pl,
                     const hd_byte* h_filterbank, hd_size nsamps, hd_size nbits,
-                    hd_size first_idx, hd_size* nsamps_processed) {
+                    hd_size first_idx, hd_size* nsamps_processed, unsigned char *timeseries_data, size_t original_nsamps) {
   hd_error error = HD_NO_ERROR;
   
   Stopwatch total_timer;
@@ -228,7 +227,9 @@ hd_error hd_execute(hd_pipeline pl,
   Stopwatch candidates_timer;
   
   start_timer(total_timer);
-  
+
+	cout << "Third data test: " << timeseries_data[0] << " " << timeseries_data[1] << endl;
+	
   start_timer(clean_timer);
   // Note: Filterbank cleaning must be done out-of-place
   hd_size nbytes = nsamps * pl->params.nchans * nbits / 8;
@@ -245,7 +246,7 @@ hd_error hd_execute(hd_pipeline pl,
   hd_float cleaning_dm = 0.f;
   if( pl->params.verbosity >= 3 ) {
     /*
-    cout << "\tWriting dirty filterbank to disk..." << endl;
+    cout << "\tWWriting dirty filterbank to disk..." << endl;
     write_host_filterbank(&h_filterbank[0],
                           pl->params.nchans, nsamps, nbits,
                           pl->params.dt, pl->params.f0, pl->params.df,
@@ -267,7 +268,7 @@ hd_error hd_execute(hd_pipeline pl,
                                pl->params.rfi_min_beams,
                                1);//pl->params.boxcar_max);
   if( error != HD_NO_ERROR ) {
-    return throw_error(error);
+    return throw_error_heimdall(error);
   }
 
   if( pl->params.verbosity >= 2 ) {
@@ -279,7 +280,7 @@ hd_error hd_execute(hd_pipeline pl,
                                   pl->params.num_channel_zaps,
                                   pl->params.channel_zaps);
   if( error != HD_NO_ERROR ) {
-    return throw_error(error);
+    return throw_error_heimdall(error);
   }
 
   hd_size good_chan_count = thrust::reduce(h_killmask.begin(),
@@ -354,7 +355,9 @@ hd_error hd_execute(hd_pipeline pl,
   
   hd_size nsamps_computed  = nsamps - dedisp_get_max_delay(pl->dedispersion_plan);
   hd_size series_stride    = nsamps_computed;
-  
+
+	size_t nsamps_processed_prev = *nsamps_processed;  
+
   // Report the number of samples that will be properly processed
   *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
   
@@ -400,29 +403,35 @@ hd_error hd_execute(hd_pipeline pl,
   }
   
   // Dedisperse
-  dedisp_error       derror;
-  const dedisp_byte* in = &pl->h_clean_filterbank[0];
-  dedisp_byte*       out = &pl->h_dm_series[0];
-  dedisp_size        in_nbits = nbits;
-  dedisp_size        in_stride = pl->params.nchans * in_nbits/8;
-  dedisp_size        out_nbits = pl->params.dm_nbits;
-  dedisp_size        out_stride = series_stride * out_nbits/8;
-  unsigned           flags = 0;
-  start_timer(dedisp_timer);
-  derror = dedisp_execute_adv(pl->dedispersion_plan, nsamps,
-                              in, in_nbits, in_stride,
-                              out, out_nbits, out_stride,
-                              flags);
-  stop_timer(dedisp_timer);
-  if( derror != DEDISP_NO_ERROR ) {
-    return throw_dedisp_error(derror);
-  }
+	dedisp_error       derror;
+	const dedisp_byte* in = &pl->h_clean_filterbank[0];
+	dedisp_byte*       out = &pl->h_dm_series[0];
+	dedisp_size        in_nbits = nbits;
+	dedisp_size        in_stride = pl->params.nchans * in_nbits/8;
+	dedisp_size        out_nbits = pl->params.dm_nbits;
+  	dedisp_size        out_stride = series_stride * out_nbits/8;
+  	unsigned           flags = 0;
+  	start_timer(dedisp_timer);
+		
+	// will be removing this as dedispersion has been executed for peasoup
+	derror = dedisp_execute_adv(pl->dedispersion_plan, nsamps,
+                              		in, in_nbits, in_stride,
+                              		out, out_nbits, out_stride,
+                              		flags);
+	stop_timer(dedisp_timer);
+	
+	if( derror != DEDISP_NO_ERROR ) 
+	{
+    		ErrorChecker::check_dedisp_error(derror,"dedisp_execute_adv");
+		//return throw_dedisp_error(derror);
+  	}
   
-  if( beam == 0 && first_idx == 0 ) {
-    // TESTING
-    //write_host_time_series((unsigned int*)out, nsamps_computed, out_nbits,
-    //                       pl->params.dt, "dedispersed_0.tim");
-  }
+  	if( beam == 0 && first_idx == 0 ) 
+	{
+    		// TESTING
+    		//write_host_time_series((unsigned int*)out, nsamps_computed, out_nbits,
+   		 //                       pl->params.dt, "dedispersed_0.tim");
+  	}
   
   if( pl->params.verbosity >= 2 ) {
     cout << "\tBeginning inner pipeline..." << endl;
@@ -457,19 +466,29 @@ hd_error hd_execute(hd_pipeline pl,
     hd_float* time_series = thrust::raw_pointer_cast(&pl->d_time_series[0]);
     
     // Copy the time series to the device and convert to floats
-    hd_size offset = dm_idx * series_stride * pl->params.dm_nbits/8;
-    start_timer(copy_timer);
-    switch( pl->params.dm_nbits ) {
-    case 8:
-      thrust::copy((unsigned char*)&pl->h_dm_series[offset],
-                   (unsigned char*)&pl->h_dm_series[offset] + cur_nsamps,
-                   pl->d_time_series.begin());
-      break;
-    case 16:
-      thrust::copy((unsigned short*)&pl->h_dm_series[offset],
-                   (unsigned short*)&pl->h_dm_series[offset] + cur_nsamps,
-                   pl->d_time_series.begin());
-      break;
+
+	//need to copy 
+	hd_size offset = dm_idx * original_nsamps + nsamps_processed_prev; // dm_nbits = 8, so dm_nbits/8 = 1;
+
+	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset, timeseries_data + offset + cur_nsamps);
+
+//	hd_size offset = dm_idx * series_stride * pl->params.dm_nbits/8;
+// this is so wrong
+//	thrust::copy(timeseries_data[offset], timeseries_data[offset] + cur_nsamps, pl->d_time_series.begin());    
+
+    	start_timer(copy_timer);
+    	switch( pl->params.dm_nbits )
+	{
+    		case 8:
+      			thrust::copy((unsigned char*)&pl->h_dm_series[offset],
+				(unsigned char*)&pl->h_dm_series[offset] + cur_nsamps,
+				pl->d_time_series.begin());
+      			break;
+    		case 16:
+      			thrust::copy((unsigned short*)&pl->h_dm_series[offset],
+                   		(unsigned short*)&pl->h_dm_series[offset] + cur_nsamps,
+                   		pl->d_time_series.begin());
+      			break;
     case 32:
       // Note: 32-bit implies float, not unsigned int
       thrust::copy((float*)&pl->h_dm_series[offset],
@@ -493,7 +512,7 @@ hd_error hd_execute(hd_pipeline pl,
     error = baseline_remover.exec(time_series, cur_nsamps, nsamps_smooth);
     stop_timer(baseline_timer);
     if( error != HD_NO_ERROR ) {
-      return throw_error(error);
+      return throw_error_heimdall(error);
     }
     
     if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
@@ -573,7 +592,7 @@ hd_error hd_execute(hd_pipeline pl,
                                        rel_tscrunch_width);
       
       if( error != HD_NO_ERROR ) {
-        return throw_error(error);
+        return throw_error_heimdall(error);
       }
       // Divide and round up
       hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1)
@@ -631,7 +650,7 @@ hd_error hd_execute(hd_pipeline pl,
                                 d_giant_ends);
       
       if( error != HD_NO_ERROR ) {
-        return throw_error(error);
+        return throw_error_heimdall(error);
       }
       
       hd_size rel_cur_filtered_offset = (cur_filtered_offset /
@@ -716,7 +735,7 @@ hd_error hd_execute(hd_pipeline pl,
                                      d_giant_labels_ptr,
                                      &label_count);
     if( error != HD_NO_ERROR ) {
-      return throw_error(error);
+      return throw_error_heimdall(error);
     }
   
     hd_size group_count = label_count;
@@ -765,136 +784,145 @@ hd_error hd_execute(hd_pipeline pl,
     h_group_dms = d_group_dms;
     //h_group_flags = d_group_flags;
   }
-  
-  if( pl->params.verbosity >= 2 ) {
-    cout << "Writing output candidates, utc_start=" << pl->params.utc_start << endl;
-  }
 
-  char buffer[64];
-  time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-  strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
+	if( h_group_peaks.size() > 0 )
+	{  
 
-  std::stringstream ss;
-  ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
+		if( pl->params.verbosity >= 2 )
+		{
+			cout << "Writing output candidates, utc_start=" << pl->params.utc_start << endl;
+  		}
 
-  std::ostringstream oss;
+  		char buffer[64];
+  		time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
+  		strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
 
-  if ( pl->params.coincidencer_host != NULL && pl->params.coincidencer_port != -1 )
-  {
-    try 
-    {
-      ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
+		std::stringstream ss;
+		ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
 
-      strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
+		std::ostringstream oss;
+	
+		if ( pl->params.coincidencer_host != NULL && pl->params.coincidencer_port != -1 )
+  		{
+    			try 
+    			{
+				ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
-      oss <<  buffer << " ";
+      				strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
 
-      time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-      strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
-      oss << buffer << " ";
+      				oss <<  buffer << " ";
 
-      oss << first_idx << " ";
-      oss << ss.str() << " ";
-      oss << h_group_peaks.size() << endl;
-      client_socket << oss.str();
-      oss.flush();
-      oss.str("");
+      				time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
+      				strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
+      				oss << buffer << " ";
 
-      for (hd_size i=0; i<h_group_peaks.size(); ++i ) 
-      {
-        hd_size samp_idx = first_idx + h_group_inds[i];
-        oss << h_group_peaks[i] << "\t"
-                      << samp_idx << "\t"
-                      << samp_idx * pl->params.dt << "\t"
-                      << h_group_filter_inds[i] << "\t"
-                      << h_group_dm_inds[i] << "\t"
-                      << h_group_dms[i] << "\t"
-                      << h_group_members[i] << "\t"
-                      << first_idx + h_group_begins[i] << "\t"
-                      << first_idx + h_group_ends[i] << endl;
+      				oss << first_idx << " ";
+      				oss << ss.str() << " ";
+      				oss << h_group_peaks.size() << endl;
+      				client_socket << oss.str();
+      				oss.flush();
+      				oss.str("");
 
-        client_socket << oss.str();
-        oss.flush();
-        oss.str("");
-      }
+      				for (hd_size i=0; i<h_group_peaks.size(); ++i ) 
+      				{
+        				hd_size samp_idx = first_idx + h_group_inds[i];
+        				oss << h_group_peaks[i] << "\t"
+                      				<< samp_idx << "\t"
+                      				<< samp_idx * pl->params.dt << "\t"
+                      				<< h_group_filter_inds[i] << "\t"
+                      				<< h_group_dm_inds[i] << "\t"
+                      				<< h_group_dms[i] << "\t"
+                      				<< h_group_members[i] << "\t"
+                      				<< first_idx + h_group_begins[i] << "\t"
+                      				<< first_idx + h_group_ends[i] << endl;
+
+        				client_socket << oss.str();
+        				oss.flush();
+        				oss.str("");
+      				}
       // client_socket should close when it goes out of scope...
-    }
-    catch (SocketException& e )
-    {
-      std::cerr << "SocketException was caught:" << e.description() << "\n";
-    }
+    			}
+    			catch (SocketException& e )
+    			{
+      				std::cerr << "SocketException was caught:" << e.description() << "\n";
+    			}
 
-  }
-  //else
-  //{
+  		}
 
-    // HACK %13
+		if( pl->params.verbosity >= 2 )
+      		cout << "Output timestamp: " << buffer << endl;
 
-    if( pl->params.verbosity >= 2 )
-      cout << "Output timestamp: " << buffer << endl;
+    		std::string filename = std::string(pl->params.output_dir) + "/" + std::string(buffer) + "_" + ss.str() + ".cand";
 
-    std::string filename = std::string(pl->params.output_dir) + "/" + std::string(buffer) + "_" + ss.str() + ".cand";
+    		if( pl->params.verbosity >= 2 )
+      		cout << "Output filename: " << filename << endl;
 
-    if( pl->params.verbosity >= 2 )
-      cout << "Output filename: " << filename << endl;
+    		std::ofstream cand_file(filename.c_str(), std::ios::out);
+    		if( pl->params.verbosity >= 2 )
+      		cout << "Dumping " << h_group_peaks.size() << " candidates to " << filename << endl;
 
-    std::ofstream cand_file(filename.c_str(), std::ios::out);
-    if( pl->params.verbosity >= 2 )
-      cout << "Dumping " << h_group_peaks.size() << " candidates to " << filename << endl;
-
-    if (cand_file.good())
-    {
-      for( hd_size i=0; i<h_group_peaks.size(); ++i ) {
-        hd_size samp_idx = first_idx + h_group_inds[i];
-        cand_file << h_group_peaks[i] << "\t"
-                  << samp_idx << "\t"
-                  << samp_idx * pl->params.dt << "\t"
-                  << h_group_filter_inds[i] << "\t"
-                  << h_group_dm_inds[i] << "\t"
-                  << h_group_dms[i] << "\t"
-                  //<< h_group_flags[i] << "\t"
-                  << h_group_members[i] << "\t"
-                  // HACK %13
-                  //<< (beam+pl->params.beam)%13+1 << "\t"
-                  << first_idx + h_group_begins[i] << "\t"
-                  << first_idx + h_group_ends[i] << "\t"
-                  << "\n";
-      }
-    }
-    else
-      cout << "Skipping dump due to bad file open on " << filename << endl;
-    cand_file.close();
-  //}
-    
-  stop_timer(candidates_timer);
+    		if (cand_file.good())
+    		{
+			cand_file << "S/N\t" << "peak sample\t" << "peak time\t"
+					<< "filter idx\t" << "DM idx\t" << "DM\t"
+					<< "members no.\t" << "begin sample\t"
+					<< "end sample\n"; 
+      			for( hd_size i=0; i<h_group_peaks.size(); ++i )
+			{
+        			hd_size samp_idx = first_idx + h_group_inds[i];
+        			cand_file << h_group_peaks[i] << "\t"
+                  				<< samp_idx << "\t\t"
+                  				<< samp_idx * pl->params.dt << "\t\t"
+                  				<< h_group_filter_inds[i] << "\t\t"
+                  				<< h_group_dm_inds[i] << "\t"
+                  				<< h_group_dms[i] << "\t"
+                  				//<< h_group_flags[i] << "\t"
+                  				<< h_group_members[i] << "\t\t"
+                  				// HACK %13
+                  				//<< (beam+pl->params.beam)%13+1 << "\t"
+                  				<< first_idx + h_group_begins[i] << "\t\t"
+                  				<< first_idx + h_group_ends[i] << "\t"
+                  				<< "\n";
+      			}
+    		}
+    		else
+      			cout << "Skipping dump due to bad file open on " << filename << endl;
+    		cand_file.close();
+  	}
+    	else
+	{
+		if( pl->params.verbosity >= 2 )
+			cout << "No candidated deteced. Will not create a file..." << endl;
+	}
+  	
+	stop_timer(candidates_timer);
+  	stop_timer(total_timer);
   
-  stop_timer(total_timer);
-  
-#ifdef HD_BENCHMARK
-  if( pl->params.verbosity >= 1 )
-  {
-  cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
-  cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
-  cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
-  cout << "Copy time:               " << copy_timer.getTime() << endl;
-  cout << "Baselining time:         " << baseline_timer.getTime() << endl;
-  cout << "Normalisation time:      " << normalise_timer.getTime() << endl;
-  cout << "Filtering time:          " << filter_timer.getTime() << endl;
-  cout << "Find giants time:        " << giants_timer.getTime() << endl;
-  cout << "Process candidates time: " << candidates_timer.getTime() << endl;
-  cout << "Total time:              " << total_timer.getTime() << endl;
-  }
+	#ifdef HD_BENCHMARK
+  	if( pl->params.verbosity >= 1 )
+  	{
+  		cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
+  		cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
+  		cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
+  		cout << "Copy time:               " << copy_timer.getTime() << endl;
+  		cout << "Baselining time:         " << baseline_timer.getTime() << endl;
+  		cout << "Normalisation time:      " << normalise_timer.getTime() << endl;
+  		cout << "Filtering time:          " << filter_timer.getTime() << endl;
+  		cout << "Find giants time:        " << giants_timer.getTime() << endl;
+  		cout << "Process candidates time: " << candidates_timer.getTime() << endl;
+  		cout << "Total time:              " << total_timer.getTime() << endl;
+  	}
 
-  hd_float time_sum = (memory_timer.getTime() +
-                       clean_timer.getTime() +
-                       dedisp_timer.getTime() +
-                       copy_timer.getTime() +
-                       baseline_timer.getTime() +
-                       normalise_timer.getTime() +
-                       filter_timer.getTime() +
-                       giants_timer.getTime() +
-                       candidates_timer.getTime());
-  hd_float misc_time = total_timer.getTime() - time_sum;
+  	hd_float time_sum = (memory_timer.getTime() +
+				clean_timer.getTime() +
+                      		dedisp_timer.getTime() +
+                       		copy_timer.getTime() +
+                       		baseline_timer.getTime() +
+                       		normalise_timer.getTime() +
+                       		filter_timer.getTime() +
+                       		giants_timer.getTime() +
+                       		candidates_timer.getTime());
+  	hd_float misc_time = total_timer.getTime() - time_sum;
   
   /*
   std::ofstream timing_file("timing.dat", std::ios::app);
@@ -912,25 +940,30 @@ hd_error hd_execute(hd_pipeline pl,
   timing_file.close();
   */
   
-#endif // HD_BENCHMARK
+	#endif // HD_BENCHMARK
   
-  if( too_many_giants ) {
-    return HD_TOO_MANY_EVENTS;
-  }
-  else {
-    return HD_NO_ERROR;
-  }
+  	if( too_many_giants )
+	{
+    	return HD_TOO_MANY_EVENTS;
+  	}
+  	else 
+	{
+    		return HD_NO_ERROR;
+  	}
 }
 
-void hd_destroy_pipeline(hd_pipeline pipeline) {
-  if( pipeline->params.verbosity >= 2 ) {
-    cout << "\tDeleting pipeline object..." << endl;
-  }
+void hd_destroy_pipeline(hd_pipeline pipeline)
+{
+	if( pipeline->params.verbosity >= 2 )
+	{
+    		cout << "\tDeleting pipeline object..." << endl;
+  	}
   
-  dedisp_destroy_plan(pipeline->dedispersion_plan);
+	dedisp_destroy_plan(pipeline->dedispersion_plan);
   
-  // Note: This assumes memory owned by pipeline cleans itself up
-  if( pipeline ) {
-    delete pipeline;
-  }
+  	// Note: This assumes memory owned by pipeline cleans itself up
+  	if( pipeline )
+	{
+    		delete pipeline;
+  	}
 }

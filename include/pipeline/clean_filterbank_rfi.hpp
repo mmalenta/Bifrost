@@ -9,6 +9,8 @@
 
 #include <pipeline/pipeline_types.hpp>
 #include <pipeline/error.hpp>
+#include <utils/exceptions.hpp>
+
 #include <dedisp.h>
 
 hd_error clean_filterbank_rfi(dedisp_plan    plan,
