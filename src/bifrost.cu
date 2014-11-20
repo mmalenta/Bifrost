@@ -2,6 +2,10 @@
 #include <data_types/fourierseries.hpp>
 #include <data_types/candidates.hpp>
 #include <data_types/filterbank.hpp>
+#include <pipeline/error.hpp>
+#include <pipeline/default_params.hpp>
+#include <pipeline/pipeline_types.hpp>
+#include <pipeline/pipeline.hpp>
 #include <transforms/dedisperser.hpp>
 #include <transforms/resampler.hpp>
 #include <transforms/folder.hpp>
@@ -27,6 +31,7 @@
 #include <unistd.h>
 #include "cuda.h"
 #include "cufft.h"
+#include "dedisp.h"
 #include "pthread.h"
 #include <cmath>
 #include <map>
@@ -34,6 +39,7 @@
 using std::cin;
 using std::cout;
 using std::endl;
+using std::cerr;
 
 class DMDispenser {
 private:
@@ -276,7 +282,7 @@ int main(int argc, char* argv[])
 
 	// MERGE PEASOUP AND HEIMDALL COMMAND LINE OPTIONS AND ADD ADITIONAL ONES
 	// HEIMDALL USES SOME CUSTOM WRITTEN FUNCTION TO PARSE ARGUMENTS IN A CRUDE
-	// WAY AS COMPARED TO PEASOUP WHICH MAKES USE OF TCLAP - MERGE DONE USING 
+	// WAY AS COMPARED TO PEASOUP WHICH MAKES USE OF TCLAP - MERGE DONE USING
 	// TCLAP FOR ALL COMMAND LINE OPTIONS
 
 	/*#####################################################################
@@ -287,6 +293,7 @@ int main(int argc, char* argv[])
 		3. USE 4 DIFFERENT VERBOSITY LEVELS FROM HEIMDAL - USE MultiSwitchArg
 		4. INCLUDED FROM HEIMDALL: -k (use PSRDADA hexadecimal key), -s
 		(scrunching), -
+		5. MAKE IT POSSIBLE TO CHOOSE BETWEEN PULSAR DETECTION, SINGLE PULSE DETECTION OR BOTH (DEFAULT)
 
 	#####################################################################*/
 
@@ -294,7 +301,7 @@ int main(int argc, char* argv[])
 	if (!read_cmdline_options(args,argc,argv))
     		ErrorChecker::throw_error("Failed to parse command line arguments.");
 
-	//COPY THE CODE FROM PSRGPU1 FOR DIFFERENT GPU IDS
+	//COPY THE CODE FROM PSRGPU1 FOR DIFFERENT GPU IDS - DONE
 
 	std::vector<int>::iterator iter_gpu_ids;
 
@@ -315,7 +322,9 @@ int main(int argc, char* argv[])
         	std::cout << "Device " << i << ": " <<  properties.name << std::endl;
    	}
 
-	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || args.max_num_threads < device_count )
+	cout << "Number of devices requested: " << args.max_num_threads << endl;
+	cout << "Number of IDs entered: " << args.gpu_ids.size() << endl;
+	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || device_count < args.max_num_threads )
 		ErrorChecker::throw_error("The number of specified IDs must be lower than the number of GPUs available");
 
 	if (args.gpu_ids.empty())
@@ -328,12 +337,12 @@ int main(int argc, char* argv[])
 	if (!args.gpu_ids.empty())
 	{
    		if (args.gpu_ids.size() != nthreads) // just for testing - will later move to exceptions
-        	{      
+        	{
 			std::cout << "The number of GPUs used must be the same as the number of IDs provided (if any)" << std::endl;
                 	std::cout << "Will now terminate!" << std::endl;
                 	return 1;
         	}
-  	} else 
+  	} else
   	{
    		for (int current_id = 0; current_id < nthreads; current_id++)
         	{
@@ -341,8 +350,12 @@ int main(int argc, char* argv[])
         	}
   	}
 
-	std::vector<int>::iterator ids_iterator; 
-   
+
+	// ################# VERBOSE
+	args.verbose = true; // for testing purposes
+
+	std::vector<int>::iterator ids_iterator;
+
  	std::cout << std::endl;
 
 	std::cout << "Devices that will be used: " << std::endl;
@@ -351,7 +364,7 @@ int main(int argc, char* argv[])
   	{
    		cudaGetDeviceProperties(&properties, *ids_iterator);
         	std::cout << "Device " << *ids_iterator << ": " << properties.name << std::endl;
-  	} 
+  	}
 
 
 	// MERGE PEASOUP AND HEIMDALL FILE READ FUNCTIONS
@@ -388,9 +401,11 @@ int main(int argc, char* argv[])
         }
 
     	std::cout << "Generating DM list" << std::endl;
-	// I don't like the fact there are so many methods in the dedisperser class - use heimdall example of making it simpler
+	// I don't like the fact there are so many methods in the dedisperser class - use heimdall example of making it simpler later
   	dedisperser.generate_dm_list(args.dm_start,args.dm_end,args.dm_pulse_width,args.dm_tol);
   	std::vector<float> dm_list = dedisperser.get_dm_list();
+
+
 
 	if (args.verbose)
 	{
@@ -405,80 +420,313 @@ int main(int argc, char* argv[])
     	std::cout << "Starting dedispersion...\n";
 
   	timers["dedispersion"].start();
- 	 PUSH_NVTX_RANGE("Dedisperse",3)
+ 	PUSH_NVTX_RANGE("Dedisperse",3)
   	DispersionTrials<unsigned char> trials = dedisperser.dedisperse();
   	POP_NVTX_RANGE
+
+	size_t output_samps = trials.get_nsamps();
+
+	size_t dm_size = trials.get_dm_list_size();
+
+	size_t output_size = output_samps * dm_size;
+
+	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
+
+	timeseries_data_ptr = trials.get_data();
+	
+	cout << "Number of samples in the timeseries: " << output_samps << endl;
+	cout << "Timeseries data size: " << output_size << endl;
+	//cout << "Trials data pointer: " << trials.get_data();
+	cout << "First data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
+
   	timers["dedispersion"].stop();
 
   	if (args.progress_bar)
-    	std::cout << "Dedispersion execution time: " << timers["dedispersion"].getTime() << "s\n";
+	    	std::cout << "Dedispersion execution time: " << timers["dedispersion"].getTime() << "s\n";
 
-	std::cout << "Pulsar searching starts here\n";
+	if( args.pulsar_search || args.both_search)
+	{
 
-	unsigned int size;
-  	if (args.size==0)
-    		size = Utils::prev_power_of_two(filobj.get_nsamps());
-  	else
-    		size = args.size;
-  	if (args.verbose)
-    		std::cout << "Setting transform length to " << size << " points" << std::endl;
-  
-  	AccelerationPlan acc_plan(args.acc_start, args.acc_end, args.acc_tol,
-			    args.acc_pulse_width, size, filobj.get_tsamp(),
-			    filobj.get_cfreq(), filobj.get_foff()); 
-  
-  
-  	//Multithreading commands
-  	timers["searching"].start();
-  	std::vector<Worker*> workers(nthreads);
-  	std::vector<pthread_t> threads(nthreads);
-  	DMDispenser dispenser(trials);
-  	if (args.progress_bar)
-    		dispenser.enable_progress_bar();
-  
-  	for (int ii=0;ii<nthreads;ii++){
-    		workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,ii));
-    		pthread_create(&threads[ii], NULL, launch_worker_thread, (void*) workers[ii]);
-  	}
-  
-  	DMDistiller dm_still(args.freq_tol,true);
-  	HarmonicDistiller harm_still(args.freq_tol,args.max_harm,true,false);
-  	CandidateCollection dm_cands;
-  	for (int ii=0; ii<nthreads; ii++){
-    		pthread_join(threads[ii],NULL);
-    		dm_cands.append(workers[ii]->dm_trial_cands.cands);
-  	}
-  	timers["searching"].stop();
-  
-  	if (args.verbose)
-    		std::cout << "Distilling DMs" << std::endl;
-  	dm_cands.cands = dm_still.distill(dm_cands.cands);
-  	dm_cands.cands = harm_still.distill(dm_cands.cands);
-  
-  	CandidateScorer cand_scorer(filobj.get_tsamp(),filobj.get_cfreq(), filobj.get_foff(),
-			      fabs(filobj.get_foff())*filobj.get_nchans());
- 	 cand_scorer.score_all(dm_cands.cands);
+		std::cout << "Pulsar searching starts here\n";
 
-  	if (args.verbose)
-    		std::cout << "Setting up time series folder" << std::endl;
-  
-  	MultiFolder folder(dm_cands.cands,trials);
-  	timers["folding"].start();
-  	if (args.progress_bar)
-    		folder.enable_progress_bar();
+		unsigned int size;
+  		if (args.size==0)
+    			size = Utils::prev_power_of_two(filobj.get_nsamps());
+  		else
+    			size = args.size;
+  		if (args.verbose)
+    			std::cout << "Setting transform length to " << size << " points" << std::endl;
 
-  	if (args.npdmp > 0){
-    		if (args.verbose)
-      			std::cout << "Folding top "<< args.npdmp <<" cands" << std::endl;
-    		folder.fold_n(args.npdmp);
-  	}
-  	timers["folding"].stop();
+  		AccelerationPlan acc_plan(args.acc_start, args.acc_end, args.acc_tol,
+			    	args.acc_pulse_width, size, filobj.get_tsamp(),
+			    	filobj.get_cfreq(), filobj.get_foff()); 
 
-	std::cout << "Finished pulsar searching\n";
-	std::cout << "Single pulse searching start here\n";
 
+  		//Multithreading commands
+  		timers["searching"].start();
+  		std::vector<Worker*> workers(nthreads);
+  		std::vector<pthread_t> threads(nthreads);
+  		DMDispenser dispenser(trials);
+  		if (args.progress_bar)
+    			dispenser.enable_progress_bar();
+
+  		for (int ii=0;ii<nthreads;ii++){
+    			workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,ii));
+    			pthread_create(&threads[ii], NULL, launch_worker_thread, (void*) workers[ii]);
+  		}
+
+  		DMDistiller dm_still(args.freq_tol,true);
+  		HarmonicDistiller harm_still(args.freq_tol,args.max_harm,true,false);
+  		CandidateCollection dm_cands;
+  		for (int ii=0; ii<nthreads; ii++){
+    			pthread_join(threads[ii],NULL);
+    			dm_cands.append(workers[ii]->dm_trial_cands.cands);
+  		}
+  		timers["searching"].stop();
+
+  		if (args.verbose)
+    			std::cout << "Distilling DMs" << std::endl;
+  		dm_cands.cands = dm_still.distill(dm_cands.cands);
+  		dm_cands.cands = harm_still.distill(dm_cands.cands);
+
+  		CandidateScorer cand_scorer(filobj.get_tsamp(),filobj.get_cfreq(), filobj.get_foff(),
+			      	fabs(filobj.get_foff())*filobj.get_nchans());
+ 	 	cand_scorer.score_all(dm_cands.cands);
+
+  		if (args.verbose)
+    			std::cout << "Setting up time series folder" << std::endl;
+
+  		MultiFolder folder(dm_cands.cands,trials);
+  		timers["folding"].start();
+  		if (args.progress_bar)
+    			folder.enable_progress_bar();
+
+  		if (args.npdmp > 0){
+    			if (args.verbose)
+      				std::cout << "Folding top "<< args.npdmp <<" cands" << std::endl;
+    			folder.fold_n(args.npdmp);
+  		}
+  		timers["folding"].stop();
+
+		if (args.verbose)
+  			std::cout << "Writing output files" << std::endl;
+
+		int new_size = std::min(args.limit,(int) dm_cands.cands.size());
+		dm_cands.cands.resize(new_size);
+
+		CandidateFileWriter cand_files(args.outdir);
+		cand_files.write_binary(dm_cands.cands,"pulsar_candidates.peasoup");
+
+		OutputFileWriter stats;
+		stats.add_misc_info();
+		stats.add_header(filename);
+		stats.add_search_parameters(args);
+		stats.add_dm_list(dm_list);
+
+		std::vector<float> acc_list;
+		acc_plan.generate_accel_list(0.0,acc_list);
+		stats.add_acc_list(acc_list);
+
+		stats.add_gpu_info(args.gpu_ids);
+		stats.add_candidates(dm_cands.cands,cand_files.byte_mapping);
+		timers["total"].stop();
+		stats.add_timing_info(timers);
+
+		std::stringstream xml_filepath;
+		xml_filepath << args.outdir << "/" << "pulsar_search_overview.xml";
+		stats.to_file(xml_filepath.str());
+
+		std::cout << "Finished pulsar searching\n";
+
+		cudaDeviceReset();
+	}
+
+	if( args.single_pulse_search || args.both_search )
+	{
+		cudaDeviceReset();
+		std::cout << "Single pulse searching starts here\n";
+
+		std::cout << "Heimdall, open the Bifrost!!\n";
+		// because Bifrost opening Heimdall sounds wrong
+
+		cout << "Second data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
+
+		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
+		// don't really need the whole hd_create_pipeline in use as it only does the dedisp steps prior to the
+		// dedispersion such as creating dm list etc.
+		hd_params params;
+		hd_set_default_params(&params);
+
+		// copy command line options from args to params - due this ugly way now, put in the function later
+
+		params.verbosity = 2; // set the maximum verbosity level, so we can have as much information as possible
+		params.sigproc_file = args.infilename;
+		params.dm_min = args.dm_start;
+		params.dm_max = args.dm_end;
+		params.dm_tol = args.dm_tol;
+		params.dm_pulse_width = args.dm_pulse_width;	// expected intrinsic pulse width
+		params.dm_nbits = 8;				// not sure what it does, but safer to keep same as input data
+		params.use_scrunching =  false;
+		params.gpu_id = 0; 				// need to work on this to enable multi-GPU support
+		params.detect_thresh = 6.0;
+		params.f0 = filobj.get_fch1();
+		params.df = filobj.get_foff();
+		params.dt = filobj.get_tsamp();
+		params.nchans = filobj.get_nchans();
+		//params.utc_start = filobj_get_utc_start();	// leave for now
+		params.spectra_per_second = (double) 1.0/(double)params.dt;
+
+		size_t nsamps_gulp = params.nsamps_gulp;
+		size_t nbits = filobj.get_nbits();
+		size_t stride = stride = (params.nchans * nbits) / (8 * sizeof(char));
+
+		size_t original_samples = output_samps;
+
+		hd_pipeline pipeline;
+		hd_error error;
+
+		dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
+
+		//pipeline->set_dedispersion_plan(&original_plan);
+
+		error = hd_create_pipeline(&pipeline, original_plan, params);
+
+		if ( error != HD_NO_ERROR)
+		{
+			std::cerr << "ERROR: pipeline creation failed!!" << std::endl;
+			return 1;
+		}
+
+		std::cout << "Pipeline created successfully!!" << std::endl << "Beginning data processing for " << nsamps_gulp
+				<< " samples " << std::endl;
+
+		if ( params.verbosity >= 2)
+			cout << "allocating filterbank data vector for " << nsamps_gulp
+				<< " samples with size " << (nsamps_gulp * stride) << " bytes" << endl;
+		// hd_byte is unsigned char
+		std::vector<hd_byte> filterbank(nsamps_gulp * stride);
+
+		// ###################### IMPORTANT ############################
+		// need to find a new way of getting number of samples processed
+		// and to be processed in the new run
+		// no need to read the data - use dedispersed timeseries only
+		// #############################################################
+		size_t total_nsamps = 0;
+  		size_t nsamps_read = filobj.get_data_range(nsamps_gulp, &filterbank[0]);
+
+		cout << "Total number of time samples: " << filobj.get_nsamps() << endl;
+
+  		// copy nsamps_gulp from input data into filterbank vector
+  		// nsamps_gulp is the gulp of time samples
+  		// need space for nsamps_gulp * stride - in GRMT data case, stride = nchans
+  		// some data will be stread along e.g. 2 cells in array (16-bit data)
+  		// stride is pretty much the number of bytes required to get one time sample from all channels
+
+  		// nsamps_read = bytes_read / nchan_bytes - number of time samples actually read
+  		// will usually equal to nsamps_gulp, but can be lower because there might be less
+  		// time samples than nsamps_gulp
+  		size_t overlap = 0;
+		bool stop_requested = false;
+
+
+
+		while( nsamps_read && !stop_requested )
+		{
+
+    			if ( params.verbosity >= 1 )
+			{
+      				cout << "Executing pipeline on new gulp of " << nsamps_read
+           				<< " samples..." << endl;
+    			}
+    			//pipeline_timer.start();
+
+    			hd_size nsamps_processed = 0;
+
+    			// will have to figure out what nsamps_processed is
+    			// *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
+    			// hd_size nsamps_computed  = nsamps - dedisp_get_max_delay(pl->dedispersion_plan);
+    			// where nsamps is nsamps_read + overlap
+
+			// nsamps_read+overlap makes sure nsamps_read and nsamps_processed is the same
+
+    			error = hd_execute(pipeline, &filterbank[0], nsamps_read+overlap, nbits,
+                       			total_nsamps, &nsamps_processed, timeseries_data_ptr, original_samples);
+
+    			if (error == HD_NO_ERROR)
+    			{
+      				if (params.verbosity >= 1)
+       				cout << "Processed " << nsamps_processed << " samples." << endl;
+    			}
+    			else if (error == HD_TOO_MANY_EVENTS)
+    			{
+      				if (params.verbosity >= 1)
+        				cerr << "WARNING: hd_execute produces too many events, some data skipped" << endl;
+    			}
+    			else
+    			{
+      				cerr << "ERROR: Pipeline execution failed" << endl;
+      				cerr << "       " << hd_get_error_string(error) << endl;
+      				hd_destroy_pipeline(pipeline);
+      				return -1;
+    			}
+
+    			//pipeline_timer.stop();
+    			//cout << "pipeline time: " << pipeline_timer.getTime() << " of " << (nsamps_read+overlap) * tsamp << endl;
+    			//pipeline_timer.reset();
+
+    			total_nsamps += nsamps_processed;
+
+			cout << "Samples processed so far: " << total_nsamps << endl;
+    			// Now we must 'rewind' to do samples that couldn't be processed
+    			// Note: This assumes nsamps_gulp > 2*overlap
+			// copy non-processed data to the start of the vector
+
+			// ##########################################
+			// REMOVE THIS - NO NEED TO READ THE DATA!!!!
+			// ##########################################
+			std::copy(&filterbank[nsamps_processed * stride],
+              			&filterbank[(nsamps_read+overlap) * stride],
+              			&filterbank[0]);
+
+			// nsamps_gulp will stay the same - we don't change it anywhere
+    			// will read bit less data than the first time
+    			overlap += nsamps_read - nsamps_processed;
+			// read some new data - but don't read data that has been read before and not
+			// processed, as it has already been read therefore start writing to vector
+			// at position overlap * stride as the data before that already exists
+    			nsamps_read = filobj.get_data_range(nsamps_gulp - overlap,
+                                        			&filterbank[overlap*stride]);
+
+    			// at the end of data, never execute the pipeline
+    			// won't execute even if some data read - enough to have less than nsamps_gulp - overlap
+			// so total_nsamps might not be equal to the number of time samples in one channel
+			if (nsamps_read < nsamps_gulp - overlap)
+      				stop_requested = 1;
+
+  		}
+
+  		if( params.verbosity >= 1 )
+		{
+    			cout << "Successfully processed a total of " << total_nsamps
+         			<< " samples." << endl;
+  		}
+
+  		if( params.verbosity >= 1 )
+		{
+    			cout << "Shutting down..." << endl;
+  		}
+
+  		hd_destroy_pipeline(pipeline);
+
+  		if( params.verbosity >= 1 )
+		{
+	    		cout << "All done." << endl;
+  		}
+
+	} // end of the single pulse search if-statement
+
+	cout << "Finished the program execution" << endl;
 
 	return 0;
 }
-
 

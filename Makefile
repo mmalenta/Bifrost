@@ -10,7 +10,7 @@ INCLUDE_DIR = ./include
 
 # Compiler flags
 OPTIMISE = -O3
-DEBUG    =
+DEBUG    = 
 
 # Includes and libraries
 INCLUDE  = -I$(INCLUDE_DIR) -I$(THRUST_DIR) -I${DEDISP_DIR}/include -I${CUDA_DIR}/include -I./tclap
@@ -19,18 +19,24 @@ LIBS = -L$(CUDA_DIR)/lib64 -lcudart -L${DEDISP_DIR}/lib -ldedisp -lcufft -lpthre
 # compiler flags
 # --compiler-options -Wall
 NVCC_COMP_FLAGS = -gencode=arch=compute_20,code=sm_20 -gencode=arch=compute_30,code=sm_30 -gencode=arch=compute_35,code=sm_35
-NVCCFLAGS  = ${UCFLAGS} ${OPTIMISE} ${NVCC_COMP_FLAGS} --machine 64 -Xcompiler ${DEBUG}
+NVCCFLAGS  = -g -G ${UCFLAGS} ${OPTIMISE} ${NVCC_COMP_FLAGS} --machine 64 -Xcompiler ${DEBUG}
 CFLAGS    = ${UCFLAGS} -fPIC ${OPTIMISE} ${DEBUG}
 
+SRC_FILES = ${SRC_DIR}/bifrost.cu ${SRC_DIR}/pipeline_heimdall.cu ${SRC_DIR}/error.cpp \
+		${SRC_DIR}/measure_bandpass.cu ${SRC_DIR}/remove_baseline.cu \
+		${SRC_DIR}/get_rms.cu ${SRC_DIR}/median_filter.cu ${SRC_DIR}/matched_filter.cu \
+		${SRC_DIR}/find_giants.cu ${SRC_DIR}/client_socket.cpp ${SRC_DIR}/socket.cpp \
+		${SRC_DIR}/label_candidate_clusters.cu ${SRC_DIR}/merge_candidates.cu
+
 OBJECTS   = ${OBJ_DIR}/kernels.o
-EXE_FILES = ${BIN_DIR}/peasoup #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
+EXE_FILES = ${BIN_DIR}/bifrost #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
 
 all: directories ${OBJECTS} ${EXE_FILES}
 
 ${OBJ_DIR}/kernels.o: ${SRC_DIR}/kernels.cu
 	${NVCC} -c ${NVCCFLAGS} ${INCLUDE} $<  -o $@
 
-${BIN_DIR}/peasoup: ${SRC_DIR}/bifrost.cu ${OBJECTS}
+${BIN_DIR}/bifrost: ${SRC_FILES} ${OBJECTS}
 	${NVCC} ${NVCCFLAGS} ${INCLUDE} ${LIBS} $^ -o $@
 
 ${BIN_DIR}/harmonic_sum_test: ${SRC_DIR}/harmonic_sum_test.cpp ${OBJECTS}

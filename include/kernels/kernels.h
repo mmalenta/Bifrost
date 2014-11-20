@@ -2,8 +2,9 @@
 #include <thrust/system/cuda/vector.h>
 #include <thrust/system/cuda/execution_policy.h>
 #include <thrust/device_vector.h>
+#include <utils/exceptions.hpp>
 #include <map>
-
+#include "cufft.h"
 class cached_allocator
 {
  public:
@@ -231,23 +232,6 @@ typedef unsigned char         hd_byte;
 typedef size_t                hd_size;
 typedef float                 hd_float;
 typedef struct hd_pipeline_t* hd_pipeline;
-
-typedef int hd_error;
-enum {
-  HD_NO_ERROR = 0,
-  HD_MEM_ALLOC_FAILED,
-  HD_MEM_COPY_FAILED,
-  HD_INVALID_DEVICE_INDEX,
-  HD_DEVICE_ALREADY_SET,
-  HD_INVALID_PIPELINE,
-  HD_INVALID_POINTER,
-  HD_INVALID_STRIDE,
-  HD_INVALID_NBITS,
-  HD_PRIOR_GPU_ERROR,
-  HD_INTERNAL_GPU_ERROR,
-  HD_TOO_MANY_EVENTS,
-  HD_UNKNOWN_ERROR
-};
 
 hd_error median_scrunch5(const hd_float* d_in,
                          hd_size         count,

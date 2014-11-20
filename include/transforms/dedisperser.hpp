@@ -33,6 +33,11 @@ public:
     ErrorChecker::check_dedisp_error(error,"create_plan_multi");
   }
 
+  dedisp_plan  get_dedispersion_plan(void)
+  {
+	return plan;
+  }
+
   void set_dm_list(float* dm_list_ptr, unsigned int ndms)
   {
     dm_list.resize(ndms);
