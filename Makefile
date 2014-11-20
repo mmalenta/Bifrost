@@ -1,5 +1,9 @@
 include Makefile.inc
 
+
+.PHONY: directories clean objects bifrost
+
+
 # Output directories                                                                                                                        
 BIN_DIR     = ./bin
 OBJ_DIR     = ./obj
@@ -28,16 +32,27 @@ SRC_FILES = ${SRC_DIR}/bifrost.cu ${SRC_DIR}/pipeline_heimdall.cu ${SRC_DIR}/err
 		${SRC_DIR}/find_giants.cu ${SRC_DIR}/client_socket.cpp ${SRC_DIR}/socket.cpp \
 		${SRC_DIR}/label_candidate_clusters.cu ${SRC_DIR}/merge_candidates.cu
 
-OBJECTS   = ${OBJ_DIR}/kernels.o
+OBJECTS   = ${OBJ_DIR}/kernels.o ${OBJ_DIR}/pipeline_heimdall.o ${OBJ_DIR}/error.o \
+                ${OBJ_DIR}/measure_bandpass.o ${OBJ_DIR}/remove_baseline.o \
+                ${OBJ_DIR}/get_rms.o ${OBJ_DIR}/median_filter.o ${OBJ_DIR}/matched_filter.o \
+                ${OBJ_DIR}/find_giants.o ${OBJ_DIR}/client_socket.o ${OBJ_DIR}/socket.o \
+                ${OBJ_DIR}/label_candidate_clusters.o ${OBJ_DIR}/merge_candidates.o 
 EXE_FILES = ${BIN_DIR}/bifrost #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
 
-all: directories ${OBJECTS} ${EXE_FILES}
+all: bifrost
+objects: directories ${OBJECTS}
+bifrost: ${BIN_DIR}/bifrost
 
-${OBJ_DIR}/kernels.o: ${SRC_DIR}/kernels.cu
+${OBJ_DIR}/%.o: ${SRC_DIR}/%.cpp
+	echo "Make "$@ " from " $<
+	${CC} -c ${INCLUDE} $< -o $@
+
+${OBJ_DIR}/%.o: ${SRC_DIR}/%.cu
+	echo "Make "$@ " from " $<
 	${NVCC} -c ${NVCCFLAGS} ${INCLUDE} $<  -o $@
 
-${BIN_DIR}/bifrost: ${SRC_FILES} ${OBJECTS}
-	${NVCC} ${NVCCFLAGS} ${INCLUDE} ${LIBS} $^ -o $@
+${BIN_DIR}/bifrost: ${OBJ_DIR}/bifrost.o objects
+	${NVCC} ${NVCCFLAGS} ${INCLUDE} ${LIBS} ${OBJ_DIR}/bifrost.o ${OBJECTS} -o $@
 
 ${BIN_DIR}/harmonic_sum_test: ${SRC_DIR}/harmonic_sum_test.cpp ${OBJECTS}
 	${NVCC} ${NVCCFLAGS} ${INCLUDE} ${LIBS} $^ -o $@
