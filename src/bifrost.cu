@@ -282,7 +282,7 @@ int main(int argc, char* argv[])
 
 	// MERGE PEASOUP AND HEIMDALL COMMAND LINE OPTIONS AND ADD ADITIONAL ONES
 	// HEIMDALL USES SOME CUSTOM WRITTEN FUNCTION TO PARSE ARGUMENTS IN A CRUDE
-	// WAY AS COMPARED TO PEASOUP WHICH MAKES USE OF TCLAP - MERGE DONE USING 
+	// WAY AS COMPARED TO PEASOUP WHICH MAKES USE OF TCLAP - MERGE DONE USING
 	// TCLAP FOR ALL COMMAND LINE OPTIONS
 
 	/*#####################################################################
@@ -337,12 +337,12 @@ int main(int argc, char* argv[])
 	if (!args.gpu_ids.empty())
 	{
    		if (args.gpu_ids.size() != nthreads) // just for testing - will later move to exceptions
-        	{      
+        	{
 			std::cout << "The number of GPUs used must be the same as the number of IDs provided (if any)" << std::endl;
                 	std::cout << "Will now terminate!" << std::endl;
                 	return 1;
         	}
-  	} else 
+  	} else
   	{
    		for (int current_id = 0; current_id < nthreads; current_id++)
         	{
@@ -350,8 +350,12 @@ int main(int argc, char* argv[])
         	}
   	}
 
-	std::vector<int>::iterator ids_iterator; 
-   
+
+	// ################# VERBOSE
+	args.verbose = true; // for testing purposes
+
+	std::vector<int>::iterator ids_iterator;
+
  	std::cout << std::endl;
 
 	std::cout << "Devices that will be used: " << std::endl;
@@ -360,7 +364,7 @@ int main(int argc, char* argv[])
   	{
    		cudaGetDeviceProperties(&properties, *ids_iterator);
         	std::cout << "Device " << *ids_iterator << ": " << properties.name << std::endl;
-  	} 
+  	}
 
 
 	// MERGE PEASOUP AND HEIMDALL FILE READ FUNCTIONS
@@ -401,6 +405,8 @@ int main(int argc, char* argv[])
   	dedisperser.generate_dm_list(args.dm_start,args.dm_end,args.dm_pulse_width,args.dm_tol);
   	std::vector<float> dm_list = dedisperser.get_dm_list();
 
+
+
 	if (args.verbose)
 	{
     		std::cout << dm_list.size() << " DM trials" << std::endl;
@@ -414,11 +420,11 @@ int main(int argc, char* argv[])
     	std::cout << "Starting dedispersion...\n";
 
   	timers["dedispersion"].start();
- 	 PUSH_NVTX_RANGE("Dedisperse",3)
+ 	PUSH_NVTX_RANGE("Dedisperse",3)
   	DispersionTrials<unsigned char> trials = dedisperser.dedisperse();
   	POP_NVTX_RANGE
 
-	unsigned int output_samps = trials.get_nsamps();
+	size_t output_samps = trials.get_nsamps();
 
 	size_t dm_size = trials.get_dm_list_size();
 
@@ -427,9 +433,12 @@ int main(int argc, char* argv[])
 	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
 
 	timeseries_data_ptr = trials.get_data();
-
-	cout << "First data test: " << timeseries_data_ptr[0] << " " << timeseries_data_ptr[1] << endl;
 	
+	cout << "Number of samples in the timeseries: " << output_samps << endl;
+	cout << "Timeseries data size: " << output_size << endl;
+	//cout << "Trials data pointer: " << trials.get_data();
+	cout << "First data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
+
   	timers["dedispersion"].stop();
 
   	if (args.progress_bar)
@@ -529,18 +538,19 @@ int main(int argc, char* argv[])
 
 		std::cout << "Finished pulsar searching\n";
 
+		cudaDeviceReset();
 	}
 
 	if( args.single_pulse_search || args.both_search )
 	{
-
+		cudaDeviceReset();
 		std::cout << "Single pulse searching starts here\n";
 
 		std::cout << "Heimdall, open the Bifrost!!\n";
 		// because Bifrost opening Heimdall sounds wrong
 
-		cout << "Second data test: " << timeseries_data_ptr[0] << " " << timeseries_data_ptr[1] << endl;
-		
+		cout << "Second data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
+
 		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
 		// don't really need the whole hd_create_pipeline in use as it only does the dedisp steps prior to the
 		// dedispersion such as creating dm list etc.
@@ -548,17 +558,17 @@ int main(int argc, char* argv[])
 		hd_set_default_params(&params);
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
-		
-		params.verbosity = 4; // set the maximum verbosity level, so we can have as much information as possible
+
+		params.verbosity = 2; // set the maximum verbosity level, so we can have as much information as possible
 		params.sigproc_file = args.infilename;
 		params.dm_min = args.dm_start;
 		params.dm_max = args.dm_end;
 		params.dm_tol = args.dm_tol;
 		params.dm_pulse_width = args.dm_pulse_width;	// expected intrinsic pulse width
 		params.dm_nbits = 8;				// not sure what it does, but safer to keep same as input data
-		params.use_scrunching =  true;
+		params.use_scrunching =  false;
 		params.gpu_id = 0; 				// need to work on this to enable multi-GPU support
-		params.detect_thresh = 10.0;
+		params.detect_thresh = 6.0;
 		params.f0 = filobj.get_fch1();
 		params.df = filobj.get_foff();
 		params.dt = filobj.get_tsamp();
@@ -570,7 +580,7 @@ int main(int argc, char* argv[])
 		size_t nbits = filobj.get_nbits();
 		size_t stride = stride = (params.nchans * nbits) / (8 * sizeof(char));
 
-		size_t original_samples = filobj.get_nsamps();
+		size_t original_samples = output_samps;
 
 		hd_pipeline pipeline;
 		hd_error error;
@@ -596,42 +606,47 @@ int main(int argc, char* argv[])
 		// hd_byte is unsigned char
 		std::vector<hd_byte> filterbank(nsamps_gulp * stride);
 
+		// ###################### IMPORTANT ############################
+		// need to find a new way of getting number of samples processed
+		// and to be processed in the new run
+		// no need to read the data - use dedispersed timeseries only
+		// #############################################################
 		size_t total_nsamps = 0;
   		size_t nsamps_read = filobj.get_data_range(nsamps_gulp, &filterbank[0]);
 
-		cout << "Testing the data:" << endl << "filterbank[0]: " << filterbank[0] << endl << "filterbank[1]: "
-			<< filterbank[1] << endl;
+		cout << "Total number of time samples: " << filobj.get_nsamps() << endl;
 
   		// copy nsamps_gulp from input data into filterbank vector
   		// nsamps_gulp is the gulp of time samples
   		// need space for nsamps_gulp * stride - in GRMT data case, stride = nchans
   		// some data will be stread along e.g. 2 cells in array (16-bit data)
   		// stride is pretty much the number of bytes required to get one time sample from all channels
-		
+
   		// nsamps_read = bytes_read / nchan_bytes - number of time samples actually read
   		// will usually equal to nsamps_gulp, but can be lower because there might be less
   		// time samples than nsamps_gulp
   		size_t overlap = 0;
-		bool stop_requested = false;  		
+		bool stop_requested = false;
+
 
 
 		while( nsamps_read && !stop_requested )
 		{
-    		
+
     			if ( params.verbosity >= 1 )
 			{
       				cout << "Executing pipeline on new gulp of " << nsamps_read
            				<< " samples..." << endl;
     			}
     			//pipeline_timer.start();
-      			
+
     			hd_size nsamps_processed = 0;
-			
+
     			// will have to figure out what nsamps_processed is
     			// *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
     			// hd_size nsamps_computed  = nsamps - dedisp_get_max_delay(pl->dedispersion_plan);
     			// where nsamps is nsamps_read + overlap
-			
+
 			// nsamps_read+overlap makes sure nsamps_read and nsamps_processed is the same
 
     			error = hd_execute(pipeline, &filterbank[0], nsamps_read+overlap, nbits,
@@ -642,28 +657,34 @@ int main(int argc, char* argv[])
       				if (params.verbosity >= 1)
        				cout << "Processed " << nsamps_processed << " samples." << endl;
     			}
-    			else if (error == HD_TOO_MANY_EVENTS) 
+    			else if (error == HD_TOO_MANY_EVENTS)
     			{
       				if (params.verbosity >= 1)
         				cerr << "WARNING: hd_execute produces too many events, some data skipped" << endl;
     			}
-    			else 
+    			else
     			{
       				cerr << "ERROR: Pipeline execution failed" << endl;
       				cerr << "       " << hd_get_error_string(error) << endl;
       				hd_destroy_pipeline(pipeline);
       				return -1;
     			}
-			
+
     			//pipeline_timer.stop();
     			//cout << "pipeline time: " << pipeline_timer.getTime() << " of " << (nsamps_read+overlap) * tsamp << endl;
     			//pipeline_timer.reset();
-			
+
     			total_nsamps += nsamps_processed;
+
+			cout << "Samples processed so far: " << total_nsamps << endl;
     			// Now we must 'rewind' to do samples that couldn't be processed
     			// Note: This assumes nsamps_gulp > 2*overlap
 			// copy non-processed data to the start of the vector
-    			std::copy(&filterbank[nsamps_processed * stride],
+
+			// ##########################################
+			// REMOVE THIS - NO NEED TO READ THE DATA!!!!
+			// ##########################################
+			std::copy(&filterbank[nsamps_processed * stride],
               			&filterbank[(nsamps_read+overlap) * stride],
               			&filterbank[0]);
 
@@ -675,35 +696,35 @@ int main(int argc, char* argv[])
 			// at position overlap * stride as the data before that already exists
     			nsamps_read = filobj.get_data_range(nsamps_gulp - overlap,
                                         			&filterbank[overlap*stride]);
-			
+
     			// at the end of data, never execute the pipeline
     			// won't execute even if some data read - enough to have less than nsamps_gulp - overlap
 			// so total_nsamps might not be equal to the number of time samples in one channel
 			if (nsamps_read < nsamps_gulp - overlap)
       				stop_requested = 1;
-			
+
   		}
-    		
+
   		if( params.verbosity >= 1 )
 		{
     			cout << "Successfully processed a total of " << total_nsamps
          			<< " samples." << endl;
   		}
-    		
+
   		if( params.verbosity >= 1 )
 		{
     			cout << "Shutting down..." << endl;
   		}
-  		
+
   		hd_destroy_pipeline(pipeline);
-  		
+
   		if( params.verbosity >= 1 )
 		{
 	    		cout << "All done." << endl;
   		}
-		
+
 	} // end of the single pulse search if-statement
-	
+
 	cout << "Finished the program execution" << endl;
 
 	return 0;

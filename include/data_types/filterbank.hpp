@@ -336,14 +336,19 @@ public:
 
     }
 
-   delete [] data_temp;		// cleaning
 
    this->nsamps = new_nsamples;
    this->tsamp  = new_tsamp;
    this->data   = data_new;   
 
-   std::cout << (int)this->data[0] << std::endl;
-   std::cout << this->tsamp << std::endl;
+	std::cout << "Printing some results\n";
+   	std::cout << (int)data_new[0] << " " << (int)data_temp[0] <<  " " << (int)data_temp[hdr.nchans] << std::endl;
+
+   	std::cout << (int)this->data[0] << std::endl;
+   	std::cout << this->tsamp << std::endl;
+
+	delete [] data_temp;		// cleaning
+
 
    std::cout << "Finished averaging time samples!\n";
 
