@@ -450,38 +450,45 @@ hd_error hd_execute(hd_pipeline pl,
     		default:
       			return HD_INVALID_NBITS;
     	}
-	
+
     	stop_timer(copy_timer);
-	
+
 	cout << "Copied data to device vector..." << endl;
-    
-    // Remove the baseline
-    // -------------------
-    // Note: Divided by 2 to form a smoothing radius
-    hd_size nsamps_smooth = hd_size(pl->params.baseline_length /
+	cout << "Size of the data device vector: " << pl->d_time_series.size() << endl;
+    	// Remove the baseline
+    	// -------------------
+    	// Note: Divided by 2 to form a smoothing radius
+    	hd_size nsamps_smooth = hd_size(pl->params.baseline_length /
                                     (2 * cur_dt));
-    // Crop the smoothing length in case not enough samples
-    start_timer(baseline_timer);
+    	// Crop the smoothing length in case not enough samples
+    	start_timer(baseline_timer);
 
-	cout << "Testing time series: " << time_series[0] << endl;
-	cout << "Testing host timeseries: " << h_dm_series_original[0] << endl;
+	cout << "Testing device vector: " << pl->d_time_series[0] << endl;
+	cout << "Testing host timeseries: " << endl;//<< (int)h_dm_series_original[0] << endl;
 
-    // TESTING
-    error = baseline_remover.exec(time_series, cur_nsamps, nsamps_smooth);
-    stop_timer(baseline_timer);
-    if( error != HD_NO_ERROR ) {
-      return throw_error_heimdall(error);
-    }
+	for (int i = 0; i < 25; i++)
+		cout << pl->d_time_series[i] << endl;
 
-    if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
-      // TESTING
-      //write_device_time_series(time_series, cur_nsamps,
-      //                         cur_dt, "baselined.tim");
-    }
-    // -------------------
+    	// TESTING
+    	error = baseline_remover.exec(time_series, cur_nsamps, nsamps_smooth);
+    	stop_timer(baseline_timer);
+    	if( error != HD_NO_ERROR ) {
+      		return throw_error_heimdall(error);
+    	}
 
-    // Normalise
-    // ---------
+	cout << "After baseline remover..." << endl;
+	cout << "Testing device vector: " << pl->d_time_series[0] << endl;
+	cout << "Size of the data device vector: " << pl->d_time_series.size() << endl;
+
+    	if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
+      	// TESTING
+      	//write_device_time_series(time_series, cur_nsamps,
+      	//                         cur_dt, "baselined.tim");
+    	}
+    	// -------------------
+
+    	// Normalise
+    	// ---------
     	start_timer(normalise_timer);
     	hd_float rms = rms_getter.exec(time_series, cur_nsamps);
 	cout << "RMS: " << rms << endl;

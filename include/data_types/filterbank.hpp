@@ -29,6 +29,7 @@
 #include <algorithm>
 //#include <cstdint>
 #include <cmath>
+#include <iostream>
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -38,6 +39,19 @@
 #include "data_types/header.hpp"
 #include "utils/exceptions.hpp"
 #include <pipeline/pipeline_types.hpp>
+
+#include <thrust/functional.h>
+#include <thrust/reduce.h>
+#include <thrust/sequence.h>
+#include <thrust/sort.h>
+#include <thrust/transform.h>
+using std::cout;
+using std::endl;
+
+extern int current;
+int channel_mod (); // { current++; int modulus = current % 1024; if (modulus == 0) return 1024;
+		//		else return modulus;} 
+
 /*!
   \brief Base class for handling filterbank data.
 
@@ -340,6 +354,177 @@ public:
    this->nsamps = new_nsamples;
    this->tsamp  = new_tsamp;
    this->data   = data_new;   
+
+	// create vector fo keys which will be corresponding to channel numbers
+	// keys_vector = 1, 2 ,3 , ... , 1024, 1, 2, 3, ... etc
+	// then reduce by key, which will sum all the samples for a given channel
+
+	// fiin lower nearest power of 2 to the new_nsamples
+
+	size_t power_two_nsamples = 1 << (int)floor(log2((double)new_nsamples));
+
+	cout << "Nearest power of 2: " << power_two_nsamples;
+
+	// to avoid problems with memory process only a portion of timeseries at a time
+
+	// divide into 512 chunks
+
+	size_t to_process = power_two_nsamples / 512;
+
+//	std::vector<int> channel_keys(nchans);
+//	thrust::sequence(channel_keys.begin(), channel_keys.end(), 1);
+
+
+
+	//cout << "Will need " << sizeof(double) * to_process * nchans / 1024 / 1024
+	//	<< "MB of memory" << endl;
+
+	unsigned char *timesamples_to_process = new unsigned char[to_process * nchans]; 
+	std::copy(data_new, data_new + to_process * nchans, timesamples_to_process);
+	int *keys_array = new int[to_process * nchans];
+
+	std::generate_n(keys_array, to_process * nchans, channel_mod);
+
+	double  *sum_array = new double[nchans];
+	int *reduced_keys_array = new int[nchans];
+
+	thrust::stable_sort_by_key(keys_array, keys_array + to_process * nchans,
+					timesamples_to_process);
+
+	// timesamples_to_process is now arranged by the channel number
+	// starting with channel 1
+
+
+	thrust::pair<int*,double*> keys_values;
+
+	keys_values = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
+			timesamples_to_process, reduced_keys_array,
+			sum_array);
+
+	double *factor_array = new double[nchans];
+
+	std::fill(factor_array, factor_array + nchans, (1.0/(double)to_process));
+
+	double *mean_array = new double[nchans];
+
+	thrust::transform(sum_array, sum_array + nchans, factor_array, mean_array,
+				thrust::multiplies<double>());
+
+
+	double *rms_array = new double[nchans];
+
+	double *squared_timeseries = new double[to_process * nchans];
+
+	thrust::transform(timesamples_to_process, timesamples_to_process + to_process * nchans,
+				timesamples_to_process, squared_timeseries,
+				thrust::multiplies<double>());
+
+
+
+	double *squares_sum_array = new double[nchans];
+
+	thrust::pair<int*,double*> rms_keys_values;
+	rms_keys_values = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
+				squared_timeseries, reduced_keys_array,
+				squares_sum_array);
+
+	// rms_keys_values should be (1024,1024) pair
+	// testing
+
+	std::cout << "Number of keys groups: " << *(rms_keys_values.first)
+			<< " and number of values groups: " << *(rms_keys_values.second)
+			<< endl;
+
+	double *squares_mean = new double[nchans];
+
+	thrust::transform(squares_sum_array, squares_sum_array + nchans, factor_array,
+				squares_mean, thrust::multiplies<double>());
+
+
+
+
+	// need to calculate variance
+	// for each in timesamples_to_process, subtract mean for a given channel
+	// then square and divide by the number of time samples processed
+
+	double *channel_mean_timeseries = new double[to_process * nchans];
+	double *sample_mean_diff = new double[to_process * nchans];
+	double *sample_mean_diff_sqr = new double[to_process * nchans];
+	double *diff_sqr_sum = new double[nchans];
+	double *variance = new double[nchans];	
+
+	// expand the mean for the channel to all timesamples in a channel
+	for(int m = 0; m < nchans; m++)
+	{
+		for(size_t n = 0; n < to_process; n++)
+			channel_mean_timeseries[m*to_process + n] = mean_array[m];
+	}
+
+	thrust::transform(timesamples_to_process, timesamples_to_process + nchans * to_process,
+				channel_mean_timeseries, sample_mean_diff,
+				thrust::minus<double>());
+
+	thrust::transform(sample_mean_diff, sample_mean_diff + nchans * to_process,
+				sample_mean_diff, sample_mean_diff_sqr,
+				thrust::multiplies<double>());
+
+
+	thrust::pair<int*,double*> difference_reduction;
+	difference_reduction = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
+				sample_mean_diff_sqr, reduced_keys_array,
+				diff_sqr_sum);
+
+	thrust::transform(diff_sqr_sum, diff_sqr_sum + nchans,
+				factor_array, variance, thrust::multiplies<double>());
+
+	for(int i = 0; i < nchans; i++) rms_array[i] = sqrt(squares_mean[i]);
+
+	std::ofstream means ("mean_values.dat", std::ofstream::out | std::ofstream::trunc);
+
+	for(int j = 0; j < nchans; j++) means <<  (int)mean_array[j] 
+						<< " " << (int)rms_array[j]
+						<< " " << (int)variance[j] << endl;
+	
+	
+means.close();
+
+	delete[] rms_array;
+	delete[] squares_mean;
+	delete[] squares_sum_array;
+	delete[] squared_timeseries;
+	delete[] mean_array;
+	delete[] factor_array;
+	delete[] reduced_keys_array;
+	delete[] sum_array;
+	delete[] timesamples_to_process;
+	delete[] sample_mean_diff;
+	delete[] sample_mean_diff_sqr;
+	delete[] diff_sqr_sum;
+	delete[] variance;
+//	std::vector<unsigned char> timesamples_to_process(data_new,
+//					data_new + to_process * nchans);
+
+//	std::vector<unsigned char> sorted_timesamples(to_process * nchans);
+
+//	std::vector<int> keys_vector(to_process*nchans);
+//	std::vector<size_t> sum_vector(nchans);
+//	std::vector<int> reduced_keys_vector(nchans);
+//	std::generate_n(keys_vector.begin(), to_process*nchans, channel_mod);
+
+//	thrust::stable_sort_by_key(keys_vector.begin(), keys_vector.end(),
+//					sorted_timesamples.begin());
+//	thrust::pair<std::vector<int>::iterator,std::vector<size_t>::iterator> keys_values;
+//	keys_values = thrust::reduce_by_key(keys_vector.begin(), keys_vector.end(),
+//				sorted_timesamples.begin(), reduced_keys_vector.begin(),
+//				sum_vector.begin());
+
+
+//	cout << "Testing the keys_vector: ";
+//	for (int i = 0; i < 2048; i++) cout << keys_vector[i] << " ";
+
+//	std::cin.get();
+
+//	thrust::reduce_by_key(
 
 	std::cout << "Printing some results\n";
    	std::cout << (int)data_new[0] << " " << (int)data_temp[0] <<  " " << (int)data_temp[hdr.nchans] << std::endl;
