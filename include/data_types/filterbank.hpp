@@ -481,7 +481,7 @@ public:
 
 	std::ofstream means ("mean_values.dat", std::ofstream::out | std::ofstream::trunc);
 
-	for(int j = 0; j < nchans; j++) means <<  (int)mean_array[j] 
+	for(int j = 0; j < nchans; j++) means <<  j << " " << (int)mean_array[j] 
 						<< " " << (int)rms_array[j]
 						<< " " << (int)variance[j] << endl;
 	
