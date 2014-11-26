@@ -31,14 +31,14 @@ SRC_FILES = ${SRC_DIR}/bifrost.cu ${SRC_DIR}/pipeline_heimdall.cu ${SRC_DIR}/err
 		${SRC_DIR}/get_rms.cu ${SRC_DIR}/median_filter.cu ${SRC_DIR}/matched_filter.cu \
 		${SRC_DIR}/find_giants.cu ${SRC_DIR}/client_socket.cpp ${SRC_DIR}/socket.cpp \
 		${SRC_DIR}/label_candidate_clusters.cu ${SRC_DIR}/merge_candidates.cu \
-		${SRC_DIR}/generate_keys.cpp
+		${SRC_DIR}/generate_keys.cpp ${SRC_DIR}/mean_variance.cpp
 
 OBJECTS   = ${OBJ_DIR}/kernels.o ${OBJ_DIR}/pipeline_heimdall.o ${OBJ_DIR}/error.o \
                 ${OBJ_DIR}/measure_bandpass.o ${OBJ_DIR}/remove_baseline.o \
                 ${OBJ_DIR}/get_rms.o ${OBJ_DIR}/median_filter.o ${OBJ_DIR}/matched_filter.o \
                 ${OBJ_DIR}/find_giants.o ${OBJ_DIR}/client_socket.o ${OBJ_DIR}/socket.o \
                 ${OBJ_DIR}/label_candidate_clusters.o ${OBJ_DIR}/merge_candidates.o \
-		${OBJ_DIR}/generate_keys.o
+		${OBJ_DIR}/generate_keys.o ${OBJ_DIR}/mean_variance.o
 EXE_FILES = ${BIN_DIR}/bifrost #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
 
 all: bifrost

@@ -17,6 +17,7 @@
 #include <transforms/distiller.hpp>
 #include <transforms/harmonicfolder.hpp>
 #include <transforms/scorer.hpp>
+#include <utils/mean_variance.hpp>
 #include <utils/exceptions.hpp>
 #include <utils/utils.hpp>
 #include <utils/stats.hpp>
@@ -433,6 +434,8 @@ int main(int argc, char* argv[])
 	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
 
 	timeseries_data_ptr = trials.get_data();
+
+	perform_tests(timeseries_data_ptr, output_samps, dm_size);
 	
 	cout << "Number of samples in the timeseries: " << output_samps << endl;
 	cout << "Timeseries data size: " << output_size << endl;
@@ -538,7 +541,7 @@ int main(int argc, char* argv[])
 
 		std::cout << "Finished pulsar searching\n";
 
-		cudaDeviceReset();
+		//cudaDeviceReset();
 	}
 
 	if( args.single_pulse_search || args.both_search )

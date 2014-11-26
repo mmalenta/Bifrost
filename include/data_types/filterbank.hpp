@@ -451,7 +451,7 @@ public:
 	double *sample_mean_diff = new double[to_process * nchans];
 	double *sample_mean_diff_sqr = new double[to_process * nchans];
 	double *diff_sqr_sum = new double[nchans];
-	double *variance = new double[nchans];	
+	double *variance = new double[nchans];
 
 	// expand the mean for the channel to all timesamples in a channel
 	for(int m = 0; m < nchans; m++)
@@ -481,11 +481,11 @@ public:
 
 	std::ofstream means ("mean_values.dat", std::ofstream::out | std::ofstream::trunc);
 
-	for(int j = 0; j < nchans; j++) means <<  j << " " << (int)mean_array[j] 
+	for(int j = 0; j < nchans; j++) means <<  j+1 << " " << (int)mean_array[j] 
 						<< " " << (int)rms_array[j]
 						<< " " << (int)variance[j] << endl;
-	
-	
+
+
 means.close();
 
 	delete[] rms_array;
