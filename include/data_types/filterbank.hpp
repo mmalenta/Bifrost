@@ -1,12 +1,12 @@
 /*
   Copyright 2014 Ewan Barr
-  
+
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
-  
+
   http://www.apache.org/licenses/LICENSE-2.0
-  
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,8 +20,8 @@
   ewan.d.barr@gmail.com
 
   This file contians classes and methods for the reading, storage
-  and manipulation of filterbank format data. Filterbank format 
-  can be any time-frequency data block. Time must be the slowest 
+  and manipulation of filterbank format data. Filterbank format
+  can be any time-frequency data block. Time must be the slowest
   changing dimension.
 */
 
@@ -50,33 +50,33 @@ using std::endl;
 
 extern int current;
 int channel_mod (); // { current++; int modulus = current % 1024; if (modulus == 0) return 1024;
-		//		else return modulus;} 
+		//		else return modulus;}
 
 /*!
   \brief Base class for handling filterbank data.
 
   All time and frequency resolved data types should inherit
-  from this class. Class presents virtual set and get methods 
+  from this class. Class presents virtual set and get methods
   for various requrired meta data. The filterbank data itself
   is stred in the *data pointer as unsigend chars.
 */
 class Filterbank {
 protected:
   //Filterbank metadata
-  unsigned char*  data; /*!< Pointer to filterbank data.*/ 
-  unsigned int nsamps; /*!< Number of time samples. */ 
-  unsigned int nchans; /*!< Number of frequecy channels. */ 
-  unsigned char nbits; /*!< Bits per time sample. */ 
-  float fch1; /*!< Frequency of top channel (MHz) */ 
-  float foff; /*!< Channel bandwidth (MHz) */ 
-  float tsamp; /*!< Sampling time (seconds) */ 
-  
+  unsigned char*  data; /*!< Pointer to filterbank data.*/
+  unsigned int nsamps; /*!< Number of time samples. */
+  unsigned int nchans; /*!< Number of frequecy channels. */
+  unsigned char nbits; /*!< Bits per time sample. */
+  float fch1; /*!< Frequency of top channel (MHz) */
+  float foff; /*!< Channel bandwidth (MHz) */
+  float tsamp; /*!< Sampling time (seconds) */
+
   /*!
     \brief Instantiate a new Filterbank object with metadata.
-    
+
     Instantiate a new Filterbank object from an existing data
     pointer and metadata.
-    
+
     \param data_ptr A pointer to a memory location containing filterbank data.
     \param nsamps The number of time samples in the data.
     \param nchans The number of frequency channels in that data.
@@ -113,7 +113,7 @@ public:
   
   /*!
     \brief Set the sampling time.
-    
+
     \param tsamp The sampling time of the data (in seconds).
   */
   virtual void set_tsamp(float tsamp){this->tsamp = tsamp;}
@@ -237,7 +237,7 @@ class SigprocFilterbank: public Filterbank {
 public:
   /*!
     \brief Create a new SigprocFilterbank object from a file.
-    
+
     Constructor opens a filterbank file reads the header and then
     reads all of the data from the filterbank file into CPU RAM.
     Metadata is set from the filterbank header values.
@@ -284,7 +284,7 @@ public:
     unsigned char *data_new = new unsigned char [new_input_size];
 
     unsigned int nchans = hdr.nchans;
-    unsigned int nsamples = hdr.nsamples;		
+    unsigned int nsamples = hdr.nsamples;
 
     size_t total_nsamples = (size_t) nchans * nsamples;
 
@@ -293,7 +293,7 @@ public:
     size_t saved = 0;
 
     for ( size_t current_sample_block = 0; current_sample_block < total_nsamples; current_sample_block+= size_t(nchans * 2))
-    { 
+    {
 
 	// the following code will only work if the number of channels can be divided by 8
 	// need to include a check and introduce unrollinf by 2 if the number of channels cannot be divided by 8
@@ -311,17 +311,17 @@ public:
                 data_point_8 = (unsigned int) (data_temp[(size_t) current_sample_block + current_channel + 7] + data_temp[(size_t) current_sample_block + current_channel + 7 + nchans]);
 
 		if (data_point_1 > 255)
-			data_point_1 = 255;		
+			data_point_1 = 255;
 
 		if (data_point_2 > 255)
 			data_point_2 = 255;
 
 		if (data_point_3 > 255)
 			data_point_3 = 255;
-		
+
 		if (data_point_4 > 255)
 			data_point_4 = 255;
-	
+
 		if (data_point_5 > 255)
 			data_point_5 = 255;
 
@@ -353,7 +353,7 @@ public:
 
    this->nsamps = new_nsamples;
    this->tsamp  = new_tsamp;
-   this->data   = data_new;   
+   this->data   = data_new;
 
 	// create vector fo keys which will be corresponding to channel numbers
 	// keys_vector = 1, 2 ,3 , ... , 1024, 1, 2, 3, ... etc
@@ -369,6 +369,9 @@ public:
 
 	// divide into 512 chunks
 
+	// no difference if 1/512th is processed or 1/16th
+	// use 1/512th for efficiency purposes
+	// TEST COVARIANCE MATRIX FOR 1/16TH DATA
 	size_t to_process = power_two_nsamples / 512;
 
 //	std::vector<int> channel_keys(nchans);
@@ -379,7 +382,7 @@ public:
 	//cout << "Will need " << sizeof(double) * to_process * nchans / 1024 / 1024
 	//	<< "MB of memory" << endl;
 
-	unsigned char *timesamples_to_process = new unsigned char[to_process * nchans]; 
+	unsigned char *timesamples_to_process = new unsigned char[to_process * nchans];
 	std::copy(data_new, data_new + to_process * nchans, timesamples_to_process);
 	int *keys_array = new int[to_process * nchans];
 
@@ -441,6 +444,7 @@ public:
 				squares_mean, thrust::multiplies<double>());
 
 
+	std::cout << "Calculating variances..." << std::endl;
 
 
 	// need to calculate variance
@@ -460,14 +464,14 @@ public:
 			channel_mean_timeseries[m*to_process + n] = mean_array[m];
 	}
 
+	// (x - <x>) step
 	thrust::transform(timesamples_to_process, timesamples_to_process + nchans * to_process,
 				channel_mean_timeseries, sample_mean_diff,
 				thrust::minus<double>());
-
+	// (x - <x>)^2 step
 	thrust::transform(sample_mean_diff, sample_mean_diff + nchans * to_process,
 				sample_mean_diff, sample_mean_diff_sqr,
 				thrust::multiplies<double>());
-
 
 	thrust::pair<int*,double*> difference_reduction;
 	difference_reduction = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
@@ -485,10 +489,108 @@ public:
 						<< " " << (int)rms_array[j]
 						<< " " << (int)variance[j] << endl;
 
-
-means.close();
-
 	delete[] rms_array;
+
+	double channels_sum;
+	double channels_mean;
+	double channels_variance;
+
+	channels_sum = thrust::reduce(mean_array, mean_array + nchans, 0);
+
+	channels_mean = channels_sum / (double)1024;
+
+	double *mean_expand = new double[nchans];
+	double *channels_mean_diff = new double[nchans];
+	double *channels_mean_diff_sqr = new double[nchans];
+
+	std::fill(mean_expand, mean_expand + nchans, channels_mean);
+
+	thrust::transform(mean_array, mean_array + nchans, mean_expand,
+				channels_mean_diff, thrust::minus<double>());
+
+	thrust::transform(channels_mean_diff, channels_mean_diff + nchans,
+				channels_mean_diff, channels_mean_diff_sqr,
+				thrust::multiplies<double>());
+
+	channels_variance = thrust::reduce(channels_mean_diff_sqr,
+		channels_mean_diff_sqr + nchans, 0);
+
+	channels_variance /= (double)1024;
+
+	means << endl << endl << "Channels mean: " << channels_mean
+		<< endl << "Channels variance: " << channels_variance;
+
+	double total_variance = thrust::reduce(variance, variance + nchans, 0);
+	double total_mean = thrust::reduce(mean_array, mean_array + nchans, 0);
+	double standard_dev = sqrt(total_variance);
+
+
+	means << endl << endl << "Total variance: " << total_variance
+		<< endl << "Mean sum: " << total_mean
+		<< endl << "Standard deviation: " << standard_dev;
+
+	means.close();
+
+	double *covariance_matrix = new double[nchans * nchans];
+	double *sample_mean_diff_trans = new double[nchans * to_process];
+
+	// obtain covariance matrix
+	// the result will be a 1024 x 1024 matrix
+	std::cout << "Calculating covariance matrix..." << std::endl;
+
+	// need to sum up (x - <x>) for each channel
+
+	// have a matrix of x - <x>
+	// multiply by its transpose
+
+	// create transpose
+	for (int i = 0; i < to_process; i++)
+	{
+		for (int j = 0; j < nchans; j++)
+		{
+			sample_mean_diff_trans[j + i * nchans] =
+				sample_mean_diff[i + j * to_process];
+		}
+	}
+
+	//multiplication
+	double sum = 0.0;
+	double progress = 0.0;
+
+
+	for (int i = 0; i < nchans; i++)
+	{
+		for (int j = 0; j < nchans ; j++)
+		{
+			for (int k = 0; k < to_process ; k++)
+			{
+				sum += sample_mean_diff[i * to_process + k] * 
+					sample_mean_diff_trans[j + k * nchans];
+			}
+			covariance_matrix[i * nchans + j] = sum / (double)to_process;
+			sum = 0.0;
+		}
+		progress = (double)i/(double)nchans * (double)100;
+		// \r returns to the start of the line
+		std::cout << "Completed " << progress << " of covariance matrix\r";
+		std::cout.flush(); // print of immediately without buffering
+	}
+
+	std::cout << std::endl;
+	std::ofstream cov_file("covariance_matrix.dat", std::ofstream::out | std::ofstream::trunc);
+
+	for (int i = 0; i < nchans; i++)
+	{
+		for (int j = 0; j < nchans; j++)
+		{
+			cov_file << (int)covariance_matrix[i * nchans + j] << " "; 
+		}
+		cov_file << std::endl;
+	}
+
+	cov_file.close();
+
+
 	delete[] squares_mean;
 	delete[] squares_sum_array;
 	delete[] squared_timeseries;
@@ -501,6 +603,11 @@ means.close();
 	delete[] sample_mean_diff_sqr;
 	delete[] diff_sqr_sum;
 	delete[] variance;
+	delete[] mean_expand;
+	delete[] channels_mean_diff;
+	delete[] channels_mean_diff_sqr;
+	delete[] covariance_matrix;
+	delete[] sample_mean_diff_trans;
 //	std::vector<unsigned char> timesamples_to_process(data_new,
 //					data_new + to_process * nchans);
 

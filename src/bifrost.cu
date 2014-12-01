@@ -436,7 +436,7 @@ int main(int argc, char* argv[])
 	timeseries_data_ptr = trials.get_data();
 
 	perform_tests(timeseries_data_ptr, output_samps, dm_size);
-	
+
 	cout << "Number of samples in the timeseries: " << output_samps << endl;
 	cout << "Timeseries data size: " << output_size << endl;
 	//cout << "Trials data pointer: " << trials.get_data();

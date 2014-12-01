@@ -453,8 +453,6 @@ hd_error hd_execute(hd_pipeline pl,
 
     	stop_timer(copy_timer);
 
-	cout << "Copied data to device vector..." << endl;
-	cout << "Size of the data device vector: " << pl->d_time_series.size() << endl;
     	// Remove the baseline
     	// -------------------
     	// Note: Divided by 2 to form a smoothing radius
@@ -463,22 +461,11 @@ hd_error hd_execute(hd_pipeline pl,
     	// Crop the smoothing length in case not enough samples
     	start_timer(baseline_timer);
 
-	cout << "Testing device vector: " << pl->d_time_series[0] << endl;
-	cout << "Testing host timeseries: " << endl;//<< (int)h_dm_series_original[0] << endl;
-
-	for (int i = 0; i < 25; i++)
-		cout << pl->d_time_series[i] << endl;
-
-    	// TESTING
     	error = baseline_remover.exec(time_series, cur_nsamps, nsamps_smooth);
     	stop_timer(baseline_timer);
     	if( error != HD_NO_ERROR ) {
       		return throw_error_heimdall(error);
     	}
-
-	cout << "After baseline remover..." << endl;
-	cout << "Testing device vector: " << pl->d_time_series[0] << endl;
-	cout << "Size of the data device vector: " << pl->d_time_series.size() << endl;
 
     	if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
       	// TESTING
