@@ -224,8 +224,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 	return HD_NO_ERROR;
 }
 
-hd_error hd_execute(hd_pipeline pl,
-			const hd_byte* h_filterbank, hd_size nsamps, hd_size nbits,
+hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                     	hd_size first_idx, hd_size* nsamps_processed,
 			unsigned char *timeseries_data, size_t original_nsamps) {
 
@@ -327,46 +326,6 @@ hd_error hd_execute(hd_pipeline pl,
 
   typedef thrust::device_ptr<hd_float> dev_float_ptr;
   typedef thrust::device_ptr<hd_size>  dev_size_ptr;
-
-/*  if( pl->params.verbosity >= 2 ) {
-    cout << "\tDedispersing for DMs " << dm_list[0]
-         << " to " << dm_list[dm_count-1] << "..." << endl;
-  }
-
-  // Dedisperse
-	dedisp_error       derror;
-	const dedisp_byte* in = &pl->h_clean_filterbank[0];
-	dedisp_byte*       out = &pl->h_dm_series[0];
-	dedisp_size        in_nbits = nbits;
-	dedisp_size        in_stride = pl->params.nchans * in_nbits/8;
-	dedisp_size        out_nbits = pl->params.dm_nbits;
-  	dedisp_size        out_stride = series_stride * out_nbits/8;
-  	unsigned           flags = 0;
-  	start_timer(dedisp_timer);
-
-	// will be removing this as dedispersion has been executed for peasoup
-	derror = dedisp_execute_adv(pl->dedispersion_plan, nsamps,
-                              		in, in_nbits, in_stride,
-                             		out, out_nbits, out_stride,
-                              		flags);
-	stop_timer(dedisp_timer);
-
-	if( derror != DEDISP_NO_ERROR )
-	{
-    		ErrorChecker::check_dedisp_error(derror,"dedisp_execute_adv");
-		//return throw_dedisp_error(derror);
-  	} */
-
-	if( beam == 0 && first_idx == 0 )
-	{
-    		// TESTING
-    		//write_host_time_series((unsigned int*)out, nsamps_computed, out_nbits,
-   		 //                       pl->params.dt, "dedispersed_0.tim");
-  	}
-
-  if( pl->params.verbosity >= 2 ) {
-    cout << "\tBeginning inner pipeline..." << endl;
-  }
 
   // TESTING
   hd_size write_dm = 0;

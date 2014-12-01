@@ -533,6 +533,7 @@ public:
 
 	double *covariance_matrix = new double[nchans * nchans];
 	double *sample_mean_diff_trans = new double[nchans * to_process];
+	bool *mask_array = new bool[nchans * nchans];
 
 	// obtain covariance matrix
 	// the result will be a 1024 x 1024 matrix
@@ -555,7 +556,7 @@ public:
 
 	//multiplication
 	double sum = 0.0;
-	double progress = 0.0;
+	int progress = 0;
 
 
 	for (int i = 0; i < nchans; i++)
@@ -568,11 +569,14 @@ public:
 					sample_mean_diff_trans[j + k * nchans];
 			}
 			covariance_matrix[i * nchans + j] = sum / (double)to_process;
+			if (covariance_matrix[i * nchans + j] >= 0.5)
+				mask_array[i * nchans + j] = 1;
+			else mask_array[i * nchans + j] = 0;
 			sum = 0.0;
 		}
-		progress = (double)i/(double)nchans * (double)100;
+		progress = (int)((double)i/(double)nchans * (double)100);
 		// \r returns to the start of the line
-		std::cout << "Completed " << progress << " of covariance matrix\r";
+		std::cout << "Completed " << progress << "% of covariance matrix\r";
 		std::cout.flush(); // print of immediately without buffering
 	}
 
@@ -590,6 +594,16 @@ public:
 
 	cov_file.close();
 
+	std::ofstream mask_file("mask_covariance.dat", std::ofstream::out | std::ofstream::trunc);
+
+	for (int i = 0; i < nchans; i++)
+	{
+		for (int j = 0; j < nchans; j++)
+		{
+			mask_file << mask_array[i * nchans + j] << " ";
+		}
+		mask_file << std::endl;
+	}
 
 	delete[] squares_mean;
 	delete[] squares_sum_array;
@@ -608,6 +622,7 @@ public:
 	delete[] channels_mean_diff_sqr;
 	delete[] covariance_matrix;
 	delete[] sample_mean_diff_trans;
+	delete[] mask_array;
 //	std::vector<unsigned char> timesamples_to_process(data_new,
 //					data_new + to_process * nchans);
 
