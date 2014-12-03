@@ -279,14 +279,14 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     }
   }
 
+	// dedisp_set_killmask(pl->dedispersion_plan, &h_killmask[0]);
+
 	// Set channel killmask for dedispersion
 	// remove as data has already been dedispersed
 	//dedisp_set_killmask(pl->dedispersion_plan, &h_killmask[0]);
 
-  hd_size nsamps_computed  = nsamps - dedisp_get_max_delay(pl->dedispersion_plan);
+  hd_size nsamps_computed  = nsamps; // - dedisp_get_max_delay(pl->dedispersion_plan); !! not dedispersing data anymore
   hd_size series_stride    = nsamps_computed;
-
-	cout << "Series stide: " << series_stride << endl;
 
   // Report the number of samples that will be properly processed
   *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
@@ -305,6 +305,8 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
   start_timer(memory_timer);
 
+
+	// does it have to be done every time we use new gulp?
   pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
   pl->d_time_series.resize(series_stride);
   pl->d_filtered_series.resize(series_stride, 0);
@@ -365,7 +367,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 	// original_nsamps = filobj.get_nsamps() - need to check if the number of samples
 	// is the same
 	// use series stride
-	// first_idx = total_nsamps
+	// first_idx = total_nsamps - number of samples already processed
 	// total_nsamps += nsamps_processed
 	hd_size offset = dm_idx * series_stride + first_idx;
 	//hd_size offset = dm_idx * original_nsamps + first_idx; dm_nbits = 8, so dm_nbits/8 = 1;
@@ -373,8 +375,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 	// there must be a problem with that, as magically no giants are found now
 
 	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset, timeseries_data + offset + cur_nsamps);
-
-	cout << "Size of h_dm_series_original: " << h_dm_series_original.size() << endl;
 
 //	hd_size offset = dm_idx * series_stride * pl->params.dm_nbits/8;
 // this is so wrong
@@ -437,7 +437,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     	// ---------
     	start_timer(normalise_timer);
     	hd_float rms = rms_getter.exec(time_series, cur_nsamps);
-	cout << "RMS: " << rms << endl;
 	// devides the data by RMS
 
     	thrust::transform(pl->d_time_series.begin(), pl->d_time_series.end(),
@@ -462,16 +461,18 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     hd_size max_nsamps_filtered = cur_nsamps + 1 - rel_boxcar_max;
     // This is the relative offset into the time series of the filtered data
     hd_size cur_filtered_offset = rel_boxcar_max / 2;
-    
-    // Create and prepare matched filtering operations
-    start_timer(filter_timer);
-    // Note: Filter width is relative to the current time resolution
-    matched_filter_plan.prep(time_series, cur_nsamps, rel_boxcar_max);
-    stop_timer(filter_timer);
-    // --------------------------
-    
+
+    	// Create and prepare matched filtering operations
+    	start_timer(filter_timer);
+    	// Note: Filter width is relative to the current time resolution
+	// this stage is longr than in the original heimdall as we
+	// are nto using scrunching
+    	matched_filter_plan.prep(time_series, cur_nsamps, rel_boxcar_max);
+    	stop_timer(filter_timer);
+    	// --------------------------
+
     hd_float* filtered_series = thrust::raw_pointer_cast(&pl->d_filtered_series[0]);
-    
+
     // Note: Filtering is done using a combination of tscrunching and
     //         'proper' boxcar convolution. The parameter min_tscrunch_width
     //         indicates how much of each to do. Raising min_tscrunch_width
@@ -584,14 +585,14 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                         d_giant_ends.end(),
                         d_giant_ends.begin()+prev_giant_count,
                         /*first_idx +*/ (_1+rel_cur_filtered_offset)*cur_scrunch);
-      
+
       d_giant_filter_inds.resize(d_giant_peaks.size(), filter_idx);
       d_giant_dm_inds.resize(d_giant_peaks.size(), dm_idx);
       // Note: This could be used to track total member samples if desired
       d_giant_members.resize(d_giant_peaks.size(), 1);
-      
+
       stop_timer(giants_timer);
-      
+
       // Bail if the candidate rate is too high
       hd_size total_giant_count = d_giant_peaks.size();
       hd_float data_length_mins = nsamps * pl->params.dt / 60.0;
@@ -601,7 +602,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
         cout << "WARNING: exceeded max giants/min, DM [" << dm_list[dm_idx] << "] space searched " << searched << "%" << endl;
         break;
       }
-      
+
     } // End of filter width loop
   } // End of DM loop
 
@@ -869,9 +870,13 @@ void hd_destroy_pipeline(hd_pipeline pipeline)
 	{
     		cout << "\tDeleting pipeline object..." << endl;
   	}
-  
-	dedisp_destroy_plan(pipeline->dedispersion_plan);
-  
+
+	cout << "Destroying dedispersion plan" << endl;
+
+//	dedisp_destroy_plan(pipeline->dedispersion_plan);
+
+	cout << "Destroyed dedispersion plan" << endl;
+
   	// Note: This assumes memory owned by pipeline cleans itself up
   	if( pipeline )
 	{

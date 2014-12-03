@@ -28,6 +28,8 @@ public:
 						  filterbank.get_tsamp(),
 						  filterbank.get_fch1(),
 						  filterbank.get_foff(),
+						  filterbank.get_mean(),
+						  filterbank.get_std_dev(),
 						  num_gpus,
 						  gpu_ids);
     ErrorChecker::check_dedisp_error(error,"create_plan_multi");

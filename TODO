@@ -1,0 +1,17 @@
+* remove the use of whole dedispersion plan from the Heimdall pipeline
+
+* fix the problem with not using -t command line option
+
+* make it work for more than just 8-bit data
+
+* adding Heimdall candidate files into general run folder
+
+* bring scrunching the data back
+
+* multi gpu support in heimdall - multiple DMs searched at the same time
+
+* check for possible problems with texture memory
+
+* plotting the data
+
+* time it properly and compare to Heimdall

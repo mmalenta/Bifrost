@@ -42,6 +42,35 @@ using std::cout;
 using std::endl;
 using std::cerr;
 
+struct dedisp_plan_struct {
+  // Multi-GPU parameters 
+  dedisp_size  device_count;
+  // Size parameters
+  dedisp_size  dm_count;
+  dedisp_size  nchans;
+  dedisp_size  max_delay;
+  dedisp_size  gulp_size;
+  // Physical parameters
+  dedisp_float dt;
+  dedisp_float f0;
+  dedisp_float df;
+  // Host arrays
+  std::vector<dedisp_float> dm_list;      // size = dm_count
+  std::vector<dedisp_float> delay_table;  // size = nchans
+  std::vector<dedisp_bool>  killmask;     // size = nchans
+  std::vector<dedisp_size>  scrunch_list; // size = dm_count
+  // Device arrays //NEW: one for each GPU 
+  std::vector< thrust::device_vector<dedisp_float> > d_dm_list;
+  std::vector< thrust::device_vector<dedisp_float> > d_delay_table;
+  std::vector< thrust::device_vector<dedisp_bool> >  d_killmask;
+  std::vector< thrust::device_vector<dedisp_size> >  d_scrunch_list;
+  //StreamType stream;
+  // Scrunching parameters
+  dedisp_bool  scrunching_enabled;
+  dedisp_float pulse_width;
+  dedisp_float scrunch_tol;
+};
+
 class DMDispenser {
 private:
 	DispersionTrials<unsigned char>& trials;
@@ -124,7 +153,7 @@ public:
     bool padding = false;
     if (size > trials.get_nsamps())
       padding = true;
-    
+
     CuFFTerR2C r2cfft(size);
     CuFFTerC2R c2rfft(size);
     float tobs = size*trials.get_tsamp();
@@ -162,12 +191,12 @@ public:
       if (ii==-1)
         break;
       trials.get_idx(ii,tim);
-      
+
       if (args.verbose)
 	std::cout << "Copying DM trial to device (DM: " << tim.get_dm() << ")"<< std::endl;
 
       d_tim.copy_from_host(tim);
-      
+
       //timers["rednoise"].start()
       if (padding){
 	    padding_mean = stats::mean<float>(d_tim.get_data(),trials.get_nsamps());
@@ -177,7 +206,7 @@ public:
       if (args.verbose)
 	    std::cout << "Generating acceleration list" << std::endl;
       acc_plan.generate_accel_list(tim.get_dm(),acc_list);
-      
+
       if (args.verbose)
 	    std::cout << "Searching "<< acc_list.size()<< " acceleration trials for DM "<< tim.get_dm() << std::endl;
 
@@ -238,13 +267,13 @@ public:
 	    if (args.verbose)
 	      std::cout << "Harmonic summing" << std::endl;
 	    harm_folder.fold(pspec);
-		
+
 	    if (args.verbose)
 	      std::cout << "Finding peaks" << std::endl;
 	    SpectrumCandidates trial_cands(tim.get_dm(),ii,acc_list[jj]);
 	    cand_finder.find_candidates(pspec,trial_cands);
 	    cand_finder.find_candidates(sums,trial_cands);
-	
+
 	    if (args.verbose)
 	      std::cout << "Distilling harmonics" << std::endl;
 	      accel_trial_cands.append(harm_finder.distill(trial_cands.cands));
@@ -255,14 +284,14 @@ public:
       dm_trial_cands.append(acc_still.distill(accel_trial_cands.cands));
     }
 	POP_NVTX_RANGE
-	
+
     if (args.zapfilename!="")
       delete bzap;
-    
+
     if (args.verbose)
       std::cout << "DM processing took " << pass_timer.getTime() << " seconds"<< std::endl;
   }
-  
+
 };
 
 void* launch_worker_thread(void* ptr){
@@ -309,6 +338,7 @@ int main(int argc, char* argv[])
 	// NEED TO CHECK IF THE NUMBER OF DEVICES IS HIGHER OR EQUAL TO THE NUMBER OF IDS SPECIFIED
 	// NEED TO CHECK IF THE NUMBER OF IDS IS THE SAME AS THE NUMBER OF DEVICES SPECIFIED 
 	// WITH -t COMMAND LINE OPTION (IF ANY)
+	// checks don't work if -t option not specified
 
 	int device_count;
 	if( cudaSuccess != cudaGetDeviceCount(&device_count))
@@ -435,7 +465,11 @@ int main(int argc, char* argv[])
 
 	timeseries_data_ptr = trials.get_data();
 
-	perform_tests(timeseries_data_ptr, output_samps, dm_size);
+	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
+
+	cout << "dt: " << original_plan->dt << endl;
+
+	// perform_tests(timeseries_data_ptr, output_samps, dm_size);
 
 	cout << "Number of samples in the timeseries: " << output_samps << endl;
 	cout << "Timeseries data size: " << output_size << endl;
@@ -469,7 +503,7 @@ int main(int argc, char* argv[])
   		timers["searching"].start();
   		std::vector<Worker*> workers(nthreads);
   		std::vector<pthread_t> threads(nthreads);
-  		DMDispenser dispenser(trials);
+ 		DMDispenser dispenser(trials);
   		if (args.progress_bar)
     			dispenser.enable_progress_bar();
 
@@ -562,7 +596,7 @@ int main(int argc, char* argv[])
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
 
-		params.verbosity = 2; // set the maximum verbosity level, so we can have as much information as possible
+		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
 		params.sigproc_file = args.infilename;
 		params.dm_min = args.dm_start;
 		params.dm_max = args.dm_end;
@@ -588,7 +622,9 @@ int main(int argc, char* argv[])
 		hd_pipeline pipeline;
 		hd_error error;
 
-		dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
+//		dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
+
+		cout << "dt: " << original_plan->dt << endl;
 
 		//pipeline->set_dedispersion_plan(&original_plan);
 
@@ -610,6 +646,8 @@ int main(int argc, char* argv[])
 
 		// will stop execution when the number of samples is larger 
 		// or equal to output_samps - currently original_samples
+
+		size_t nsamps_read = nsamps_gulp;
 
 		while( nsamps_read && !stop_requested )
 		{
@@ -653,7 +691,7 @@ int main(int argc, char* argv[])
 
     			overlap += nsamps_read - nsamps_processed;
 
-			if (total_nsamps += nsamps_processed > output_samps)
+			if (total_nsamps + nsamps_processed > original_samples )
       				stop_requested = 1;
 
   		}
@@ -682,4 +720,21 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

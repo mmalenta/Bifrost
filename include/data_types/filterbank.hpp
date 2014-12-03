@@ -62,40 +62,42 @@ int channel_mod (); // { current++; int modulus = current % 1024; if (modulus ==
 */
 class Filterbank {
 protected:
-  //Filterbank metadata
-  unsigned char*  data; /*!< Pointer to filterbank data.*/
-  unsigned int nsamps; /*!< Number of time samples. */
-  unsigned int nchans; /*!< Number of frequecy channels. */
-  unsigned char nbits; /*!< Bits per time sample. */
-  float fch1; /*!< Frequency of top channel (MHz) */
-  float foff; /*!< Channel bandwidth (MHz) */
-  float tsamp; /*!< Sampling time (seconds) */
+  	//Filterbank metadata
+  	unsigned char*  data; /*!< Pointer to filterbank data.*/
+  	unsigned int nsamps; /*!< Number of time samples. */
+  	unsigned int nchans; /*!< Number of frequecy channels. */
+  	unsigned char nbits; /*!< Bits per time sample. */
+  	float fch1; /*!< Frequency of top channel (MHz) */
+  	float foff; /*!< Channel bandwidth (MHz) */
+	float tsamp; /*!< Sampling time (seconds) */
+	double fil_variance; // total variance
+	double fil_std_dev;  // standard deviation derived from total variance
+	double fil_total_mean;  // sum of channel means
 
-  /*!
-    \brief Instantiate a new Filterbank object with metadata.
+  	/*!
+    	\brief Instantiate a new Filterbank object with metadata.
 
-    Instantiate a new Filterbank object from an existing data
-    pointer and metadata.
+    	Instantiate a new Filterbank object from an existing data
+    	pointer and metadata.
 
-    \param data_ptr A pointer to a memory location containing filterbank data.
-    \param nsamps The number of time samples in the data.
-    \param nchans The number of frequency channels in that data.
-    \param nbins The size of a single data point in bits.
-    \param fch1 The centre frequency of the first data channel.
-    \param foff The bandwidth of a frequency channel.
-    \param tsamp The sampling time of the data.
-  */
+    	\param data_ptr A pointer to a memory location containing filterbank data.
+    	\param nsamps The number of time samples in the data.
+    	\param nchans The number of frequency channels in that data.
+    	\param nbins The size of a single data point in bits.
+    	\param fch1 The centre frequency of the first data channel.
+    	\param foff The bandwidth of a frequency channel.
+    	\param tsamp The sampling time of the data.
+  	*/
   Filterbank(unsigned char* data_ptr, unsigned int nsamps,
 	     unsigned int nchans, unsigned char nbits,
 	     float fch1, float foff, float tsamp)
 
     :data(data_ptr),nsamps(nsamps),nchans(nchans),
      nbits(nbits),fch1(fch1),foff(foff),tsamp(tsamp){}
-  
+
   /*!
     \brief Instantiate a new default Filterbank object.
-    
-    Create a new Filterbank object with the data pointer and 
+    Create a new Filterbank object with the data pointer and
     all metadata set to zero.
   */
   Filterbank(void)
@@ -216,13 +218,25 @@ public:
 
   \return The centre frequency of the filterbank data.
   */
-  virtual float get_cfreq(void)
-  {
-    if (foff < 0)
-      return fch1+foff*nchans/2;
-    else
-      return fch1-foff*nchans/2;
-  }
+  	virtual float get_cfreq(void)
+  	{
+    		if (foff < 0)
+      			return fch1+foff*nchans/2;
+    		else
+      			return fch1-foff*nchans/2;
+  	}
+
+	virtual double get_variance(void) { return fil_variance; }
+
+	virtual void set_variance(double var) { this->fil_variance = var; }
+
+	virtual double get_mean(void) { return fil_total_mean;}
+
+	virtual void set_mean(double mean) { this->fil_total_mean = mean; }
+
+	virtual double get_std_dev(void) { return fil_std_dev; }
+
+	virtual void set_std_dev(double dev) { this->fil_std_dev = dev; }
 };
 
 
@@ -520,8 +534,10 @@ public:
 	means << endl << endl << "Channels mean: " << channels_mean
 		<< endl << "Channels variance: " << channels_variance;
 
-	double total_variance = thrust::reduce(variance, variance + nchans, 0);
-	double total_mean = thrust::reduce(mean_array, mean_array + nchans, 0);
+	thrust::plus<double> binary_op;
+
+	double total_variance = thrust::reduce(variance, variance + nchans, 0.0, binary_op);
+	double total_mean = thrust::reduce(mean_array, mean_array + nchans, 0.0, binary_op);
 	double standard_dev = sqrt(total_variance);
 
 
@@ -531,6 +547,12 @@ public:
 
 	means.close();
 
+	fil_total_mean = total_mean;
+	fil_variance = total_variance;
+	fil_std_dev = standard_dev;
+
+	// NO NEED FOR COVARIANCE MATRIX NOW - USE WHEN STUFF GOES WRONG
+/*
 	double *covariance_matrix = new double[nchans * nchans];
 	double *sample_mean_diff_trans = new double[nchans * to_process];
 	bool *mask_array = new bool[nchans * nchans];
@@ -605,6 +627,8 @@ public:
 		mask_file << std::endl;
 	}
 
+*/
+
 	delete[] squares_mean;
 	delete[] squares_sum_array;
 	delete[] squared_timeseries;
@@ -620,9 +644,10 @@ public:
 	delete[] mean_expand;
 	delete[] channels_mean_diff;
 	delete[] channels_mean_diff_sqr;
-	delete[] covariance_matrix;
-	delete[] sample_mean_diff_trans;
-	delete[] mask_array;
+//	delete[] covariance_matrix;
+//	delete[] sample_mean_diff_trans;
+//	delete[] mask_array;
+
 //	std::vector<unsigned char> timesamples_to_process(data_new,
 //					data_new + to_process * nchans);
 
@@ -648,11 +673,11 @@ public:
 
 //	thrust::reduce_by_key(
 
-	std::cout << "Printing some results\n";
-   	std::cout << (int)data_new[0] << " " << (int)data_temp[0] <<  " " << (int)data_temp[hdr.nchans] << std::endl;
+//	std::cout << "Printing some results\n";
+// 	std::cout << (int)data_new[0] << " " << (int)data_temp[0] <<  " " << (int)data_temp[hdr.nchans] << std::endl;
 
-   	std::cout << (int)this->data[0] << std::endl;
-   	std::cout << this->tsamp << std::endl;
+//   	std::cout << (int)this->data[0] << std::endl;
+//  	std::cout << this->tsamp << std::endl;
 
 	delete [] data_temp;		// cleaning
 

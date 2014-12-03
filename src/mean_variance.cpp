@@ -40,15 +40,17 @@ void perform_tests(unsigned char data_new[], size_t new_samples, size_t dm_size)
 	{
 		size_t offset = dm_index * new_samples;
 
+		thrust::plus<double> binary_op;
+
 		// read part of the dedispersed timeseries
 		std::copy(data_new + offset, data_new + offset + to_process,
 				timesamples_to_process);
 
 		// get the sum of the timesaples read
 		sum = thrust::reduce(timesamples_to_process, timesamples_to_process + to_process,
-			0);
+			0.0, binary_op);
 
-		mean = sum/to_process;
+		mean = (double)sum/(double)to_process;
 
 		//expand the mean to the whole dm trial
 		std::fill(mean_array, mean_array + to_process, mean);
@@ -63,12 +65,12 @@ void perform_tests(unsigned char data_new[], size_t new_samples, size_t dm_size)
 
 		// sum( (x - <x>)^2 ) step for variance calculation
 		diff_sqr_sum = thrust::reduce(sample_mean_diff_sqr, sample_mean_diff_sqr + to_process,
-			0);
+			0.0, binary_op);
 
 		// sample variance
-		variance = diff_sqr_sum / to_process;
+		variance = (double)diff_sqr_sum / (double)to_process;
 
-		output_file << dm_index << " " << mean << " " << variance << endl;
+		output_file << dm_index << " " << mean << " " << variance << " " << sqrt(variance) << endl;
 
 	}
 
