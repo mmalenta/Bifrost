@@ -67,5 +67,5 @@ struct hd_params {
   int gpu_id;
   time_t utc_start;             // UTC time of first sample
   hd_size spectra_per_second;   
-  const char * output_dir;
+  std::string output_dir;
 };

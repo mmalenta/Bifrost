@@ -596,6 +596,7 @@ int main(int argc, char* argv[])
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
 
+		params.output_dir = args.outdir;
 		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
 		params.sigproc_file = args.infilename;
 		params.dm_min = args.dm_start;
@@ -661,7 +662,7 @@ int main(int argc, char* argv[])
     			hd_size nsamps_processed = 0;
 
     			error = hd_execute(pipeline, nsamps_read+overlap, nbits,
-                       			total_nsamps, &nsamps_processed, timeseries_data_ptr, original_samples);
+                       			total_nsamps, &nsamps_processed, timeseries_data_ptr, original_samples, args.both_search);
 
     			if (error == HD_NO_ERROR)
     			{
