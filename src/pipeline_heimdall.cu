@@ -15,6 +15,7 @@ using std::endl;
 #include <iomanip>
 #include <string>
 #include <fstream>
+#include <sys/stat.h>
 //#include <utils/cmdline.hpp>
 
 #include <thrust/host_vector.h>
@@ -226,7 +227,9 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 
 hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                     	hd_size first_idx, hd_size* nsamps_processed,
-			unsigned char *timeseries_data, size_t original_nsamps) {
+			unsigned char *timeseries_data, size_t original_nsamps,
+			bool both_search)
+{
 
 	hd_error error = HD_NO_ERROR;
 
@@ -297,37 +300,39 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     cout << "nsamps_computed = " << nsamps_computed << endl;
   }
 
-  hd_size beam = pl->params.beam;
+  	hd_size beam = pl->params.beam;
 
-  if( pl->params.verbosity >= 2 ) {
-    cout << "\tAllocating memory for pipeline computations..." << endl;
-  }
+  	if( pl->params.verbosity >= 2 )
+    		cout << "\tAllocating memory for pipeline computations..." << endl;
 
-  start_timer(memory_timer);
+  	start_timer(memory_timer);
 
 
-	// does it have to be done every time we use new gulp?
-  pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
-  pl->d_time_series.resize(series_stride);
-  pl->d_filtered_series.resize(series_stride, 0);
+ 	pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
+  	pl->d_time_series.resize(series_stride);
+ 	pl->d_filtered_series.resize(series_stride, 0);
 
-  stop_timer(memory_timer);
+  	stop_timer(memory_timer);
 
-  RemoveBaselinePlan          baseline_remover;
-  GetRMSPlan                  rms_getter;
-  MatchedFilterPlan<hd_float> matched_filter_plan;
-  GiantFinder                 giant_finder;
+	if ( pl->params.verbosity >=2 )
+		cout << "\tMemory allocated successfully" << endl;
 
-  thrust::device_vector<hd_float> d_giant_peaks;
-  thrust::device_vector<hd_size>  d_giant_inds;
-  thrust::device_vector<hd_size>  d_giant_begins;
-  thrust::device_vector<hd_size>  d_giant_ends;
-  thrust::device_vector<hd_size>  d_giant_filter_inds;
-  thrust::device_vector<hd_size>  d_giant_dm_inds;
-  thrust::device_vector<hd_size>  d_giant_members;
 
-  typedef thrust::device_ptr<hd_float> dev_float_ptr;
-  typedef thrust::device_ptr<hd_size>  dev_size_ptr;
+  	RemoveBaselinePlan          baseline_remover;
+  	GetRMSPlan                  rms_getter;
+  	MatchedFilterPlan<hd_float> matched_filter_plan;
+  	GiantFinder                 giant_finder;
+
+  	thrust::device_vector<hd_float> d_giant_peaks;
+  	thrust::device_vector<hd_size>  d_giant_inds;
+  	thrust::device_vector<hd_size>  d_giant_begins;
+  	thrust::device_vector<hd_size>  d_giant_ends;
+  	thrust::device_vector<hd_size>  d_giant_filter_inds;
+  	thrust::device_vector<hd_size>  d_giant_dm_inds;
+  	thrust::device_vector<hd_size>  d_giant_members;
+
+  	typedef thrust::device_ptr<hd_float> dev_float_ptr;
+  	typedef thrust::device_ptr<hd_size>  dev_size_ptr;
 
   // TESTING
   hd_size write_dm = 0;
@@ -370,15 +375,10 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 	// first_idx = total_nsamps - number of samples already processed
 	// total_nsamps += nsamps_processed
 	hd_size offset = dm_idx * series_stride + first_idx;
-	//hd_size offset = dm_idx * original_nsamps + first_idx; dm_nbits = 8, so dm_nbits/8 = 1;
 
-	// there must be a problem with that, as magically no giants are found now
+	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset,
+					timeseries_data + offset + cur_nsamps);
 
-	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset, timeseries_data + offset + cur_nsamps);
-
-//	hd_size offset = dm_idx * series_stride * pl->params.dm_nbits/8;
-// this is so wrong
-//	thrust::copy(timeseries_data[offset], timeseries_data[offset] + cur_nsamps, pl->d_time_series.begin());    
 
     	start_timer(copy_timer);
     	switch( pl->params.dm_nbits )
@@ -768,7 +768,10 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		if( pl->params.verbosity >= 2 )
       		cout << "Output timestamp: " << buffer << endl;
 
-    		std::string filename = std::string(pl->params.output_dir) + "/" + std::string(buffer) + "_" + ss.str() + ".cand";
+		if (!both_search)
+			mkdir(pl->params.output_dir.c_str(), 0777);
+
+		std::string filename = std::string(pl->params.output_dir) + std::string(buffer) + "_" + ss.str() + ".cand";
 
     		if( pl->params.verbosity >= 2 )
       		cout << "Output filename: " << filename << endl;
