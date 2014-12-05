@@ -596,12 +596,8 @@ int main(int argc, char* argv[])
 		hd_set_default_params(&params);
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
-<<<<<<< HEAD
 		
 		params.utc_start = filobj.get_utc_start();
-=======
-
->>>>>>> 14942290c021aac1814c5319b5552d8a43fff30b
 		params.output_dir = args.outdir;
 		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
 		params.sigproc_file = args.infilename;
