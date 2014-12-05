@@ -79,9 +79,6 @@ struct hd_pipeline_t {
 
 hd_error allocate_gpu(const hd_pipeline pl) {
   // TODO: This is just a simple proc-->GPU heuristic to get us started
-
-	cout << "In the GPU alloacation function" << endl;
-	cout << "Verbosity level here: " << pl->params.verbosity << endl;
 	int gpu_count;
   	cudaGetDeviceCount(&gpu_count);
   //int proc_idx;
@@ -274,13 +271,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
   	const dedisp_size* scrunch_factors =
     		dedisp_get_dt_factors(pl->dedispersion_plan);
-  if (pl->params.verbosity >= 3 )
-  {
-    cout << "DM List for " << pl->params.dm_min << " to " << pl->params.dm_max << endl;
-    for( hd_size i=0; i<dm_count; ++i ) {
-      cout << dm_list[i] << endl;
-    }
-  }
 
 	// dedisp_set_killmask(pl->dedispersion_plan, &h_killmask[0]);
 
@@ -288,17 +278,13 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 	// remove as data has already been dedispersed
 	//dedisp_set_killmask(pl->dedispersion_plan, &h_killmask[0]);
 
-  hd_size nsamps_computed  = nsamps; // - dedisp_get_max_delay(pl->dedispersion_plan); !! not dedispersing data anymore
-  hd_size series_stride    = nsamps_computed;
+  	hd_size nsamps_computed  = nsamps; // - dedisp_get_max_delay(pl->dedispersion_plan); !! not dedispersing data anymore
+  	hd_size series_stride    = nsamps_computed;
 
   // Report the number of samples that will be properly processed
-  *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
+  	*nsamps_processed = nsamps_computed - pl->params.boxcar_max;
 
-  if( pl->params.verbosity >= 3 ) {
-    cout << "dm_count = " << dm_count << endl;
-    cout << "max delay = " << dedisp_get_max_delay(pl->dedispersion_plan) << endl;
-    cout << "nsamps_computed = " << nsamps_computed << endl;
-  }
+    	cout << "nsamps_computed = " << nsamps_computed << endl;
 
   	hd_size beam = pl->params.beam;
 
@@ -335,9 +321,9 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   	typedef thrust::device_ptr<hd_size>  dev_size_ptr;
 
   // TESTING
-  hd_size write_dm = 0;
+  	hd_size write_dm = 0;
 
-  bool too_many_giants = false;
+ 	bool too_many_giants = false;
 
   // For each DM
   for( hd_size dm_idx=0; dm_idx<dm_count; ++dm_idx ) {
@@ -362,27 +348,27 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		cout << "\tBaselining and normalising each beam..." << endl;
     	}
 
-    	hd_float* time_series = thrust::raw_pointer_cast(&pl->d_time_series[0]);
+    	//hd_float* time_series = thrust::raw_pointer_cast(&pl->d_time_series[0]);
 
-    // Copy the time series to the device and convert to floats
+    	// Copy the time series to the device and convert to floats
 
-	// #############################
-	// THIS NEEDS A SERIOUS REVISION
-	// #############################
-	// original_nsamps = filobj.get_nsamps() - need to check if the number of samples
-	// is the same
-	// use series stride
-	// first_idx = total_nsamps - number of samples already processed
-	// total_nsamps += nsamps_processed
 	hd_size offset = dm_idx * series_stride + first_idx;
 
-	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset,
-					timeseries_data + offset + cur_nsamps);
-
-
     	start_timer(copy_timer);
-    	switch( pl->params.dm_nbits )
+
+	thrust::device_vector<float> d_time_series((unsigned char*)timeseries_data
+		+ offset, (unsigned char*)timeseries_data + offset + cur_nsamps);
+
+	hd_float *time_series = thrust::raw_pointer_cast(&d_time_series[0]);
+
+/*    	switch( pl->params.dm_nbits )
 	{
+
+		case 8:
+			thrust::copy((unsigned char*)timeseries_data + offset,
+                                (unsigned char*)timeseries_data + offset + cur_nsamps,
+                                pl->d_time_series.begin());
+			break;
 
 		case 8:
 			thrust::copy(h_dm_series_original.begin(),
@@ -390,11 +376,11 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                                 pl->d_time_series.begin());
 			break;
 
-/*    		case 8:
+    		case 8:
       			thrust::copy((unsigned char*)&pl->h_dm_series[offset],
 				(unsigned char*)&pl->h_dm_series[offset] + cur_nsamps,
 				pl->d_time_series.begin());
-      			break; */
+      			break;
     		case 16:
       			thrust::copy((unsigned short*)&pl->h_dm_series[offset],
                    		(unsigned short*)&pl->h_dm_series[offset] + cur_nsamps,
@@ -408,7 +394,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       			break;
     		default:
       			return HD_INVALID_NBITS;
-    	}
+    	} */
 
     	stop_timer(copy_timer);
 
@@ -439,10 +425,17 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     	hd_float rms = rms_getter.exec(time_series, cur_nsamps);
 	// devides the data by RMS
 
-    	thrust::transform(pl->d_time_series.begin(), pl->d_time_series.end(),
+    	thrust::transform(d_time_series.begin(), d_time_series.end(),
+                      		thrust::make_constant_iterator(hd_float(1.0)/rms),
+                      		d_time_series.begin(),
+                      		thrust::multiplies<hd_float>());
+
+/*    	thrust::transform(pl->d_time_series.begin(), pl->d_time_series.end(),
                       		thrust::make_constant_iterator(hd_float(1.0)/rms),
                       		pl->d_time_series.begin(),
-                      		thrust::multiplies<hd_float>());
+                      		thrust::multiplies<hd_float>()); */
+
+
     	stop_timer(normalise_timer);
 
     	if( beam == 0 && dm_idx == write_dm && first_idx == 0 )
@@ -452,12 +445,12 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		//				cur_dt, "normalised.tim");
     	}
     // ---------
-    
+
     // Prepare the boxcar filters
     // --------------------------
     // We can't process the first and last max-filter-width/2 samples
     hd_size rel_boxcar_max = pl->params.boxcar_max/cur_dm_scrunch;
-    
+
     hd_size max_nsamps_filtered = cur_nsamps + 1 - rel_boxcar_max;
     // This is the relative offset into the time series of the filtered data
     hd_size cur_filtered_offset = rel_boxcar_max / 2;
@@ -478,7 +471,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     //         indicates how much of each to do. Raising min_tscrunch_width
     //         increases sensitivity but decreases performance and vice
     //         versa.
-    
+
     // For each boxcar filter
     // Note: We cannot detect pulse widths < current time resolution
     for( hd_size filter_width=cur_dm_scrunch;
@@ -486,11 +479,11 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
          filter_width*=2 ) {
       hd_size rel_filter_width = filter_width / cur_dm_scrunch;
       hd_size filter_idx = get_filter_index(filter_width);
-      
+
       if( pl->params.verbosity >= 4 ) {
         cout << "Filtering each beam at width of " << filter_width << endl;
       }
-      
+
       // Note: Filter width is relative to the current time resolution
       hd_size rel_min_tscrunch_width = std::max(pl->params.min_tscrunch_width
                                                 / cur_dm_scrunch,
@@ -500,9 +493,9 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                                             hd_size(1));
       // Filter width relative to cur_dm_scrunch AND tscrunch
       hd_size rel_rel_filter_width = rel_filter_width / rel_tscrunch_width;
-      
+
       start_timer(filter_timer);
-      
+
       error = matched_filter_plan.exec(filtered_series,
                                        rel_filter_width,
                                        rel_tscrunch_width);
@@ -538,7 +531,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                         thrust::multiplies<hd_float>());
 
       stop_timer(filter_timer);
-      
+
       if( beam == 0 && dm_idx == write_dm && first_idx == 0 &&
           filter_width == 8 ) {
         // TESTING
@@ -546,15 +539,15 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
         //                         cur_nsamps_filtered,
         //                         cur_dt, "filtered.tim");
       }
-      
+
       hd_size prev_giant_count = d_giant_peaks.size();
-      
+
       if( pl->params.verbosity >= 4 ) {
         cout << "Finding giants..." << endl;
       }
-      
+
       start_timer(giants_timer);
-      
+
       error = giant_finder.exec(filtered_series, cur_nsamps_filtered,
                                 pl->params.detect_thresh,
                                 //pl->params.cand_sep_time,
@@ -702,7 +695,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   }
 
 	if( h_group_peaks.size() > 0 )
-	{  
+	{
 
 		if( pl->params.verbosity >= 2 )
 		{
@@ -717,10 +710,10 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
 
 		std::ostringstream oss;
-	
+
 		if ( pl->params.coincidencer_host != NULL && pl->params.coincidencer_port != -1 )
   		{
-    			try 
+    			try
     			{
 				ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
@@ -739,7 +732,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       				oss.flush();
       				oss.str("");
 
-      				for (hd_size i=0; i<h_group_peaks.size(); ++i ) 
+      				for (hd_size i=0; i<h_group_peaks.size(); ++i )
       				{
         				hd_size samp_idx = first_idx + h_group_inds[i];
         				oss << h_group_peaks[i] << "\t"

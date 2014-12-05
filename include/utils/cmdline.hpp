@@ -72,7 +72,7 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
 
       TCLAP::ValueArg<int> arg_max_num_threads("t", "num_threads",
 	                                            "The number of GPUs to use",
-                                                 false, 14, "int", cmd);
+                                                 false, 3, "int", cmd);
 
       TCLAP::ValueArg<int> arg_limit("", "limit",
 				     "upper limit on number of candidates to write out",

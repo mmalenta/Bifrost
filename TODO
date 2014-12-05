@@ -1,6 +1,6 @@
 * remove the use of whole dedispersion plan from the Heimdall pipeline
 
-* fix the problem with not using -t command line option
+* fix the problem with not using -t command line option -- DONE
 
 * make it work for more than just 8-bit data
 
@@ -15,3 +15,14 @@
 * plotting the data
 
 * time it properly and compare to Heimdall
+
+* fix the utc_start = 0 when writing out candidates -- DONE
+
+* fix problem with using multiple GPUs for dedispersion and then one for single pulse search -- DONE, BUT NOT HAPPY WITH SOLUTION
+
+* remove unnecessary memory allocation in pipeline_heimdall.cu
+
+* remove unnecessary tests outputs
+
+* bring back choice of snr for single pulse detection
+

@@ -73,7 +73,7 @@ protected:
 	double fil_variance; // total variance
 	double fil_std_dev;  // standard deviation derived from total variance
 	double fil_total_mean;  // sum of channel means
-
+	time_t utc_start;
   	/*!
     	\brief Instantiate a new Filterbank object with metadata.
 
@@ -237,6 +237,8 @@ public:
 	virtual double get_std_dev(void) { return fil_std_dev; }
 
 	virtual void set_std_dev(double dev) { this->fil_std_dev = dev; }
+
+	virtual time_t get_utc_start(void) { return utc_start; }
 };
 
 
@@ -273,17 +275,50 @@ public:
 
     unsigned char * data_temp = new unsigned char [input_size];
 
-    std::cout << "Reading the file\n";
-    infile.read(reinterpret_cast<char*>(data_temp), input_size);
-    // Set the metadata
-    this->nchans = hdr.nchans;
-    this->nbits = hdr.nbits;
-    this->fch1 = hdr.fch1;
-    this->foff  = hdr.foff;
+    	std::cout << "Reading the file\n";
+    	infile.read(reinterpret_cast<char*>(data_temp), input_size);
+    	// Set the metadata
+    	this->nchans = hdr.nchans;
+    	this->nbits = hdr.nbits;
+    	this->fch1 = hdr.fch1;
+    	this->foff  = hdr.foff;
 
-    std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
-    std::cout << "The channel bandwidht [MHz]: " << hdr.foff << std::endl;
-    std::cout << "The number of channels: " << hdr.nchans << std::endl;
+
+	const int seconds_in_day = 86400;
+	double mjdstart = hdr.tstart;
+
+	int days = (int)mjdstart;
+	double fdays = mjdstart - (double)days;
+	double seconds = fdays * (double)seconds_in_day;
+	int secs = (int)seconds;
+	double fracsec = seconds - (double)secs;
+	if (fracsec - 1 < 0.0000001)
+		secs++;
+
+	int julian_day = days + 2400001;
+	int n_four = 4  * (julian_day+((6*((4*julian_day-17918)/146097))/4+1)/2-37);
+      	int n_dten = 10 * (((n_four-237)%1461)/4) + 5;
+
+      	struct tm gregdate;
+      	gregdate.tm_year = n_four/1461 - 4712 - 1900; // extra -1900 for C struct tm
+      	gregdate.tm_mon  = (n_dten/306+2)%12;         // struct tm mon 0->11
+      	gregdate.tm_mday = (n_dten%306)/10 + 1;
+
+      	gregdate.tm_hour = secs / 3600;
+      	secs -= 3600 * gregdate.tm_hour;
+
+      	gregdate.tm_min = secs / 60;
+      	secs -= 60 * (gregdate.tm_min);
+
+      	gregdate.tm_sec = secs;
+
+      	gregdate.tm_isdst = -1;
+      	this->utc_start = mktime (&gregdate);
+
+
+    	std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
+    	std::cout << "The channel bandwidht [MHz]: " << hdr.foff << std::endl;
+    	std::cout << "The number of channels: " << hdr.nchans << std::endl;
 
     //averaging the time samples
 

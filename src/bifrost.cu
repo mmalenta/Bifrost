@@ -336,7 +336,7 @@ int main(int argc, char* argv[])
 	std::vector<int>::iterator iter_gpu_ids;
 
 	// NEED TO CHECK IF THE NUMBER OF DEVICES IS HIGHER OR EQUAL TO THE NUMBER OF IDS SPECIFIED
-	// NEED TO CHECK IF THE NUMBER OF IDS IS THE SAME AS THE NUMBER OF DEVICES SPECIFIED 
+	// NEED TO CHECK IF THE NUMBER OF IDS IS THE SAME AS THE NUMBER OF DEVICES SPECIFIED
 	// WITH -t COMMAND LINE OPTION (IF ANY)
 	// checks don't work if -t option not specified
 
@@ -580,6 +580,7 @@ int main(int argc, char* argv[])
 
 	if( args.single_pulse_search || args.both_search )
 	{
+		cudaSetDevice(0);
 		cudaDeviceReset();
 		std::cout << "Single pulse searching starts here\n";
 
@@ -595,7 +596,8 @@ int main(int argc, char* argv[])
 		hd_set_default_params(&params);
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
-
+		
+		params.utc_start = filobj.get_utc_start();
 		params.output_dir = args.outdir;
 		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
 		params.sigproc_file = args.infilename;
