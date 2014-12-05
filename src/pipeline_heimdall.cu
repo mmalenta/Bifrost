@@ -290,10 +290,40 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
   	if( pl->params.verbosity >= 2 )
     		cout << "\tAllocating memory for pipeline computations..." << endl;
+<<<<<<< HEAD
 
   	start_timer(memory_timer);
 
+=======
 
+  	start_timer(memory_timer);
+>>>>>>> 14942290c021aac1814c5319b5552d8a43fff30b
+
+ 	pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
+  	pl->d_time_series.resize(series_stride);
+ 	pl->d_filtered_series.resize(series_stride, 0);
+
+<<<<<<< HEAD
+  	stop_timer(memory_timer);
+
+	if ( pl->params.verbosity >=2 )
+		cout << "\tMemory allocated successfully" << endl;
+
+
+  	RemoveBaselinePlan          baseline_remover;
+  	GetRMSPlan                  rms_getter;
+  	MatchedFilterPlan<hd_float> matched_filter_plan;
+  	GiantFinder                 giant_finder;
+
+  	thrust::device_vector<hd_float> d_giant_peaks;
+  	thrust::device_vector<hd_size>  d_giant_inds;
+  	thrust::device_vector<hd_size>  d_giant_begins;
+  	thrust::device_vector<hd_size>  d_giant_ends;
+  	thrust::device_vector<hd_size>  d_giant_filter_inds;
+  	thrust::device_vector<hd_size>  d_giant_dm_inds;
+  	thrust::device_vector<hd_size>  d_giant_members;
+
+=======
  	pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
   	pl->d_time_series.resize(series_stride);
  	pl->d_filtered_series.resize(series_stride, 0);
@@ -317,6 +347,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   	thrust::device_vector<hd_size>  d_giant_dm_inds;
   	thrust::device_vector<hd_size>  d_giant_members;
 
+>>>>>>> 14942290c021aac1814c5319b5552d8a43fff30b
   	typedef thrust::device_ptr<hd_float> dev_float_ptr;
   	typedef thrust::device_ptr<hd_size>  dev_size_ptr;
 
@@ -354,12 +385,18 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
 	hd_size offset = dm_idx * series_stride + first_idx;
 
+<<<<<<< HEAD
     	start_timer(copy_timer);
 
 	thrust::device_vector<float> d_time_series((unsigned char*)timeseries_data
 		+ offset, (unsigned char*)timeseries_data + offset + cur_nsamps);
 
 	hd_float *time_series = thrust::raw_pointer_cast(&d_time_series[0]);
+=======
+	host_vector<unsigned char> h_dm_series_original(timeseries_data + offset,
+					timeseries_data + offset + cur_nsamps);
+
+>>>>>>> 14942290c021aac1814c5319b5552d8a43fff30b
 
 /*    	switch( pl->params.dm_nbits )
 	{
