@@ -43,7 +43,7 @@ using std::endl;
 using std::cerr;
 
 struct dedisp_plan_struct {
-  // Multi-GPU parameters 
+  // Multi-GPU parameters
   dedisp_size  device_count;
   // Size parameters
   dedisp_size  dm_count;
@@ -54,6 +54,8 @@ struct dedisp_plan_struct {
   dedisp_float dt;
   dedisp_float f0;
   dedisp_float df;
+	double mean;
+	double std_dev;
   // Host arrays
   std::vector<dedisp_float> dm_list;      // size = dm_count
   std::vector<dedisp_float> delay_table;  // size = nchans
@@ -310,39 +312,14 @@ int main(int argc, char* argv[])
   	timers["total"]        = Stopwatch();
   	timers["total"].start();
 
-	// MERGE PEASOUP AND HEIMDALL COMMAND LINE OPTIONS AND ADD ADITIONAL ONES
-	// HEIMDALL USES SOME CUSTOM WRITTEN FUNCTION TO PARSE ARGUMENTS IN A CRUDE
-	// WAY AS COMPARED TO PEASOUP WHICH MAKES USE OF TCLAP - MERGE DONE USING
-	// TCLAP FOR ALL COMMAND LINE OPTIONS
-
-	/*#####################################################################
-
-	CHANGES:
-		1. USE HEIMDALL'S -f FOR INPUT FILE
-		2. REPLACE --id WITH -i FOR GPU ID CHOICE
-		3. USE 4 DIFFERENT VERBOSITY LEVELS FROM HEIMDAL - USE MultiSwitchArg
-		4. INCLUDED FROM HEIMDALL: -k (use PSRDADA hexadecimal key), -s
-		(scrunching), -
-		5. MAKE IT POSSIBLE TO CHOOSE BETWEEN PULSAR DETECTION, SINGLE PULSE DETECTION OR BOTH (DEFAULT)
-
-	#####################################################################*/
-
 	CmdLineOptions args;
 	if (!read_cmdline_options(args,argc,argv))
     		ErrorChecker::throw_error("Failed to parse command line arguments.");
 
-	//COPY THE CODE FROM PSRGPU1 FOR DIFFERENT GPU IDS - DONE
-
-	std::vector<int>::iterator iter_gpu_ids;
-
-	// NEED TO CHECK IF THE NUMBER OF DEVICES IS HIGHER OR EQUAL TO THE NUMBER OF IDS SPECIFIED
-	// NEED TO CHECK IF THE NUMBER OF IDS IS THE SAME AS THE NUMBER OF DEVICES SPECIFIED
-	// WITH -t COMMAND LINE OPTION (IF ANY)
-	// checks don't work if -t option not specified
-
 	int device_count;
 	if( cudaSuccess != cudaGetDeviceCount(&device_count))
-		ErrorChecker::throw_error("There are no available CUDA-capable devices"); // exits if there are no devices detected
+		// exits if there are no devices detected
+		ErrorChecker::throw_error("There are no available CUDA-capable devices"); 
 
 	cout << "There are " << device_count << " available devices" << endl;
 
@@ -350,31 +327,26 @@ int main(int argc, char* argv[])
 	for(int i=0; i < device_count; i++)
   	{
    		cudaGetDeviceProperties(&properties, i);
-        	std::cout << "Device " << i << ": " <<  properties.name << std::endl;
+        	cout << "Device " << i << ": " <<  properties.name << endl;
    	}
 
 	cout << "Number of devices requested: " << args.max_num_threads << endl;
-	cout << "Number of IDs entered: " << args.gpu_ids.size() << endl;
-	if (args.max_num_threads < args.gpu_ids.size() || device_count < args.gpu_ids.size() || device_count < args.max_num_threads )
-		ErrorChecker::throw_error("The number of specified IDs must be lower than the number of GPUs available");
+	if (device_count < args.max_num_threads)
+		ErrorChecker::throw_error("The number of requested devices has to be lower or equal to the number of available devices");
 
-	if (args.gpu_ids.empty())
-		for (int i = 0; i < args.max_num_threads; i++) args.gpu_ids.push_back(i);
-
-	int nthreads = args.gpu_ids.size();
-
-	std::cout << "Number of GPUs that will be used: " << nthreads << std::endl;
+	int nthreads = args.max_num_threads;
 
 	if (!args.gpu_ids.empty())
 	{
-   		if (args.gpu_ids.size() != nthreads) // just for testing - will later move to exceptions
+   		if (args.gpu_ids.size() != nthreads)
         	{
-			std::cout << "The number of GPUs used must be the same as the number of IDs provided (if any)" << std::endl;
-                	std::cout << "Will now terminate!" << std::endl;
+			cout << "The number of GPUs used must be the same as the number of IDs provided (if any)" << std::endl;
+                	cout << "Will now terminate!" << endl;
                 	return 1;
         	}
   	} else
   	{
+		// will always tart with ID 0
    		for (int current_id = 0; current_id < nthreads; current_id++)
         	{
                 	args.gpu_ids.push_back(current_id);
@@ -382,33 +354,28 @@ int main(int argc, char* argv[])
   	}
 
 
-	// ################# VERBOSE
 	args.verbose = true; // for testing purposes
 
 	std::vector<int>::iterator ids_iterator;
 
- 	std::cout << std::endl;
+ 	cout << endl;
 
-	std::cout << "Devices that will be used: " << std::endl;
+	cout << "Devices that will be used: " << endl;
 
 	for (ids_iterator = args.gpu_ids.begin(); ids_iterator < args.gpu_ids.end(); ++ids_iterator)
   	{
    		cudaGetDeviceProperties(&properties, *ids_iterator);
-        	std::cout << "Device " << *ids_iterator << ": " << properties.name << std::endl;
+        	cout << "Device " << *ids_iterator << ": " << properties.name << endl;
   	}
 
 
-	// MERGE PEASOUP AND HEIMDALL FILE READ FUNCTIONS
-
 	if (args.verbose)
-    		std::cout << "Using file: " << args.infilename << std::endl;
+    		cout << "Using file: " << args.infilename << endl;
 
 	std::string filename(args.infilename);
 
 	if (args.progress_bar)
     		cout << "Reading data from " << args.infilename.c_str() << endl;
-
-	// File reading is almost the same, subtle differences in header function
 
   	timers["reading"].start();
   	SigprocFilterbank filobj(filename);
@@ -422,8 +389,6 @@ int main(int argc, char* argv[])
 	std::cout << "Starting dedispersion phase, common for both pulsar and single pulse detection" << std::endl;
 
   	Dedisperser dedisperser(filobj,args.gpu_ids,nthreads);	// dedisp_create_plan_multi invoked here
-	// Heimdall uses hd_create_pipeline to create dedispersion plan
-	// what is called plan in peasoup is called pipeline in Heimdall - stick with the name plan
         if (args.killfilename!="")
         {
                 if (args.verbose)
@@ -432,10 +397,8 @@ int main(int argc, char* argv[])
         }
 
     	std::cout << "Generating DM list" << std::endl;
-	// I don't like the fact there are so many methods in the dedisperser class - use heimdall example of making it simpler later
   	dedisperser.generate_dm_list(args.dm_start,args.dm_end,args.dm_pulse_width,args.dm_tol);
   	std::vector<float> dm_list = dedisperser.get_dm_list();
-
 
 
 	if (args.verbose)

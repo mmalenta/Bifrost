@@ -316,29 +316,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   	thrust::device_vector<hd_size>  d_giant_dm_inds;
   	thrust::device_vector<hd_size>  d_giant_members;
 
- 	pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
-  	pl->d_time_series.resize(series_stride);
- 	pl->d_filtered_series.resize(series_stride, 0);
-
-  	stop_timer(memory_timer);
-
-	if ( pl->params.verbosity >=2 )
-		cout << "\tMemory allocated successfully" << endl;
-
-
-  	RemoveBaselinePlan          baseline_remover;
-  	GetRMSPlan                  rms_getter;
-  	MatchedFilterPlan<hd_float> matched_filter_plan;
-  	GiantFinder                 giant_finder;
-
-  	thrust::device_vector<hd_float> d_giant_peaks;
-  	thrust::device_vector<hd_size>  d_giant_inds;
-  	thrust::device_vector<hd_size>  d_giant_begins;
-  	thrust::device_vector<hd_size>  d_giant_ends;
-  	thrust::device_vector<hd_size>  d_giant_filter_inds;
-  	thrust::device_vector<hd_size>  d_giant_dm_inds;
-  	thrust::device_vector<hd_size>  d_giant_members;
-
   	typedef thrust::device_ptr<hd_float> dev_float_ptr;
   	typedef thrust::device_ptr<hd_size>  dev_size_ptr;
 
@@ -797,24 +774,24 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
     		if (cand_file.good())
     		{
-			cand_file << "S/N\t" << "peak sample\t" << "peak time\t"
+			/*cand_file << "S/N\t" << "peak sample\t" << "peak time\t"
 					<< "filter idx\t" << "DM idx\t" << "DM\t"
 					<< "members no.\t" << "begin sample\t"
-					<< "end sample\n"; 
+					<< "end sample\n"; */
       			for( hd_size i=0; i<h_group_peaks.size(); ++i )
 			{
         			hd_size samp_idx = first_idx + h_group_inds[i];
         			cand_file << h_group_peaks[i] << "\t"
-                  				<< samp_idx << "\t\t"
-                  				<< samp_idx * pl->params.dt << "\t\t"
-                  				<< h_group_filter_inds[i] << "\t\t"
+                  				<< samp_idx << "\t"
+                  				<< samp_idx * pl->params.dt << "\t"
+                  				<< h_group_filter_inds[i] << "\t"
                   				<< h_group_dm_inds[i] << "\t"
                   				<< h_group_dms[i] << "\t"
                   				//<< h_group_flags[i] << "\t"
-                  				<< h_group_members[i] << "\t\t"
+                  				<< h_group_members[i] << "\t"
                   				// HACK %13
                   				//<< (beam+pl->params.beam)%13+1 << "\t"
-                  				<< first_idx + h_group_begins[i] << "\t\t"
+                  				<< first_idx + h_group_begins[i] << "\t"
                   				<< first_idx + h_group_ends[i] << "\t"
                   				<< "\n";
       			}
