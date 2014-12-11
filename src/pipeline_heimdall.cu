@@ -793,7 +793,12 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                   				//<< (beam+pl->params.beam)%13+1 << "\t"
                   				<< first_idx + h_group_begins[i] << "\t"
                   				<< first_idx + h_group_ends[i] << "\t"
-                  				<< "\n";
+                  				<< pl->params.beam_count << "\t"              // number of beams
+                  				<< 0 << "\t"                          // beam mask (whatever that is)
+                  				<< 1 << "\t"                                  // primary beam
+                  				<< "20" << "\t"                                // max_snr
+                  				<< 1 << "\t"                    // beam
+						<< "\n";
       			}
     		}
     		else

@@ -10,9 +10,9 @@
 
 * multi gpu support in heimdall - multiple DMs searched at the same time
 
-* check for possible problems with texture memory
+* check for possible problems with texture memory -- WORKING FINE AT LEAST IN THE 0 - 3000 DM RANGE
 
-* plotting the data
+* plotting the data -- something is broken
 
 * time it properly and compare to Heimdall
 
@@ -22,7 +22,10 @@
 
 * remove unnecessary memory allocation in pipeline_heimdall.cu
 
-* remove unnecessary tests outputs
+* remove unnecessary tests outputs -- ~DONE
 
 * bring back choice of snr for single pulse detection
 
+* total execution time for whole program -- DONE
+
+* clean up mean, rms and variance calculations

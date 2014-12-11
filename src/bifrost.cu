@@ -310,6 +310,8 @@ int main(int argc, char* argv[])
   	timers["searching"]    = Stopwatch();
   	timers["folding"]      = Stopwatch();
   	timers["total"]        = Stopwatch();
+	timers["pulsar"]	= Stopwatch();
+	timers["single_pulse"] 	= Stopwatch();
   	timers["total"].start();
 
 	CmdLineOptions args;
@@ -444,6 +446,8 @@ int main(int argc, char* argv[])
   	if (args.progress_bar)
 	    	std::cout << "Dedispersion execution time: " << timers["dedispersion"].getTime() << "s\n";
 
+	timers["pulsar"].start();
+
 	if( args.pulsar_search || args.both_search)
 	{
 
@@ -529,7 +533,6 @@ int main(int argc, char* argv[])
 
 		stats.add_gpu_info(args.gpu_ids);
 		stats.add_candidates(dm_cands.cands,cand_files.byte_mapping);
-		timers["total"].stop();
 		stats.add_timing_info(timers);
 
 		std::stringstream xml_filepath;
@@ -541,8 +544,13 @@ int main(int argc, char* argv[])
 		//cudaDeviceReset();
 	}
 
+	timers["pulsar"].stop();
+
+	timers["single_pulse"].start();
+
 	if( args.single_pulse_search || args.both_search )
 	{
+
 		cudaSetDevice(0);
 		cudaDeviceReset();
 		std::cout << "Single pulse searching starts here\n";
@@ -559,7 +567,7 @@ int main(int argc, char* argv[])
 		hd_set_default_params(&params);
 
 		// copy command line options from args to params - due this ugly way now, put in the function later
-		
+
 		params.utc_start = filobj.get_utc_start();
 		params.output_dir = args.outdir;
 		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
@@ -680,9 +688,24 @@ int main(int argc, char* argv[])
 	    		cout << "All done." << endl;
   		}
 
+
 	} // end of the single pulse search if-statement
 
+	timers["single_pulse"].stop();
+
+	timers["total"].stop();
+
 	cout << "Finished the program execution" << endl;
+
+
+	// REMEMBER!! timers is a map!!
+	cout << "Timing:" << endl
+		<< "\t * reading the file " << timers["reading"].getTime() << endl
+		<< "\t * dedispersion: " << timers["dedispersion"].getTime() << endl;
+	if( args.pulsar_search || args.both_search)
+		cout << "\t * pulsar search: " << timers["pulsar"].getTime() << endl;
+	if( args.single_pulse_search || args.both_search )
+		cout << "\t * single pulse search: " << timers["single_pulse"].getTime() << endl;
 
 	return 0;
 }

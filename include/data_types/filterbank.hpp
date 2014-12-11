@@ -196,7 +196,7 @@ public:
     \return The pointer to the filterbank data.
   */
   virtual unsigned char * get_data(void){return this->data;}
-  
+// i think i can safely remove it  
   virtual size_t get_data_range(size_t nsamps, hd_byte *vector_data)
   {
 //	std::cout << "Testing:" << std::endl << "data[0]" << this->data[0] << std::endl << "data[1]" << this->data[1] << std::endl;
@@ -244,7 +244,7 @@ public:
 
 /*!
   \brief A class for handling Sigproc format filterbanks.
-  
+
   A subclass of the Filterbank class for handling filterbank
   in Sigproc style/format from file. Filterbank memory buffer
   is allocated in constructor and deallocated in destructor.
@@ -412,24 +412,12 @@ public:
 
 	size_t power_two_nsamples = 1 << (int)floor(log2((double)new_nsamples));
 
-	cout << "Nearest power of 2: " << power_two_nsamples;
 
 	// to avoid problems with memory process only a portion of timeseries at a time
-
 	// divide into 512 chunks
-
 	// no difference if 1/512th is processed or 1/16th
 	// use 1/512th for efficiency purposes
-	// TEST COVARIANCE MATRIX FOR 1/16TH DATA
 	size_t to_process = power_two_nsamples / 512;
-
-//	std::vector<int> channel_keys(nchans);
-//	thrust::sequence(channel_keys.begin(), channel_keys.end(), 1);
-
-
-
-	//cout << "Will need " << sizeof(double) * to_process * nchans / 1024 / 1024
-	//	<< "MB of memory" << endl;
 
 	unsigned char *timesamples_to_process = new unsigned char[to_process * nchans];
 	std::copy(data_new, data_new + to_process * nchans, timesamples_to_process);
@@ -479,13 +467,6 @@ public:
 	rms_keys_values = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
 				squared_timeseries, reduced_keys_array,
 				squares_sum_array);
-
-	// rms_keys_values should be (1024,1024) pair
-	// testing
-
-	std::cout << "Number of keys groups: " << *(rms_keys_values.first)
-			<< " and number of values groups: " << *(rms_keys_values.second)
-			<< endl;
 
 	double *squares_mean = new double[nchans];
 
