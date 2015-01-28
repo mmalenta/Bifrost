@@ -223,7 +223,7 @@ if __name__ == "__main__":
         sys.stderr.write ( "Generating plot...\n")
       g = Gnuplot.Gnuplot(debug=0)
       if not interactive:
-        g('set terminal pngcairo enhanced font "arial,10" size ' + res_x + ', ' + res_y)
+        g('set terminal png enhanced font "arial,10" size ' + res_x + ', ' + res_y)
         if std_out:
           g('set output')
           if verbose:

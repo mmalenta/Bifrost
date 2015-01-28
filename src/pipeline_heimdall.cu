@@ -251,21 +251,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   	std::vector<int> h_killmask(pl->params.nchans, 1);
   	stop_timer(memory_timer);
 
-	if( pl->params.verbosity >= 3 )
-	{
-    		cout << "dm_min = " << pl->params.dm_min << endl;
-    		cout << "dm_max = " << pl->params.dm_max << endl;
-    		cout << "dm_tol = " << pl->params.dm_tol << endl;
-    		cout << "dm_pulse_width = " << pl->params.dm_pulse_width << endl;
-    		cout << "nchans = " << pl->params.nchans << endl;
-    		cout << "dt = " << pl->params.dt << endl;
-
-    		cout << "dedisp nchans = " << dedisp_get_channel_count(pl->dedispersion_plan) << endl;
-    		cout << "dedisp dt = " << dedisp_get_dt(pl->dedispersion_plan) << endl;
-    		cout << "dedisp f0 = " << dedisp_get_f0(pl->dedispersion_plan) << endl;
-    		cout << "dedisp df = " << dedisp_get_df(pl->dedispersion_plan) << endl;
-  	}
-
   	hd_size      dm_count = dedisp_get_dm_count(pl->dedispersion_plan);
   	const float* dm_list  = dedisp_get_dm_list(pl->dedispersion_plan);
 
@@ -283,8 +268,6 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
   // Report the number of samples that will be properly processed
   	*nsamps_processed = nsamps_computed - pl->params.boxcar_max;
-
-    	cout << "nsamps_computed = " << nsamps_computed << endl;
 
   	hd_size beam = pl->params.beam;
 
@@ -324,41 +307,59 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
  	bool too_many_giants = false;
 
-  // For each DM
-  for( hd_size dm_idx=0; dm_idx<dm_count; ++dm_idx ) {
-    hd_size  cur_dm_scrunch = scrunch_factors[dm_idx];
-    hd_size  cur_nsamps  = nsamps_computed / cur_dm_scrunch;
-    hd_float cur_dt      = pl->params.dt * cur_dm_scrunch;
+  	// For each DM
+	for( hd_size dm_idx=0; dm_idx<dm_count; ++dm_idx ) {
+		hd_size  cur_dm_scrunch = scrunch_factors[dm_idx];
+    		hd_size  cur_nsamps  = nsamps_computed / cur_dm_scrunch;
+    		hd_float cur_dt      = pl->params.dt * cur_dm_scrunch;
 
-    	// Bail if the candidate rate is too high
-    	if( too_many_giants )
-	{
-      		break;
-    	}
 
-    	if( pl->params.verbosity >= 4 )
-	{
-      		cout << "dm_idx     = " << dm_idx << endl;
-      		cout << "scrunch    = " << scrunch_factors[dm_idx] << endl;
-      		cout << "cur_nsamps = " << cur_nsamps << endl;
-      		cout << "dt0        = " << pl->params.dt << endl;
-      		cout << "cur_dt     = " << cur_dt << endl;
 
-		cout << "\tBaselining and normalising each beam..." << endl;
-    	}
+    		// Bail if the candidate rate is too high
+    		if( too_many_giants )
+		{
+      			break;
+    		}
 
-    	//hd_float* time_series = thrust::raw_pointer_cast(&pl->d_time_series[0]);
+    		if( pl->params.verbosity >= 4 )
+		{
+      			cout << "dm_idx     = " << dm_idx << endl;
+      			cout << "scrunch    = " << scrunch_factors[dm_idx] << endl;
+      			cout << "cur_nsamps = " << cur_nsamps << endl;
+      			cout << "dt0        = " << pl->params.dt << endl;
+      			cout << "cur_dt     = " << cur_dt << endl;
 
-    	// Copy the time series to the device and convert to floats
+			cout << "\tBaselining and normalising each beam..." << endl;
+    		}
 
-	hd_size offset = dm_idx * series_stride + first_idx;
+    		// Copy the time series to the device and convert to floats
 
-    	start_timer(copy_timer);
 
-	thrust::device_vector<float> d_time_series((unsigned char*)timeseries_data
-		+ offset, (unsigned char*)timeseries_data + offset + cur_nsamps);
+		//hd_size offset = dm_idx * series_stride + first_idx;
 
-	hd_float *time_series = thrust::raw_pointer_cast(&d_time_series[0]);
+		hd_size offset = dm_idx * original_nsamps + first_idx;
+
+    		start_timer(copy_timer);
+
+		thrust::device_vector<float> d_time_series((unsigned char*)timeseries_data
+			+ offset, (unsigned char*)timeseries_data + offset + cur_nsamps);
+
+		hd_float *time_series = thrust::raw_pointer_cast(&d_time_series[0]);
+
+		// PRINT OUT TIMESERIES DATA FOR DM OF INTEREST
+
+		/*if (dm_idx == 1 && first_idx == 5238784)
+		{
+			std::ofstream times_data ("times_data_samp_5238784.dat", std::ofstream::out | std::ofstream::trunc);
+			for ( size_t sample = 0; sample < series_stride; sample ++)
+				times_data << sample << " " << d_time_series[sample] << endl;
+
+			cout << "Printed timeseries data" << endl;
+
+			times_data.close();
+			std::cin.get();
+		}*/
+
 
 /*    	switch( pl->params.dm_nbits )
 	{
@@ -498,7 +499,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       error = matched_filter_plan.exec(filtered_series,
                                        rel_filter_width,
                                        rel_tscrunch_width);
-      
+
       if( error != HD_NO_ERROR ) {
         return throw_error_heimdall(error);
       }
@@ -506,12 +507,12 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1)
                                      / rel_tscrunch_width + 1);
       hd_size cur_scrunch = cur_dm_scrunch * rel_tscrunch_width;
-      
+
       // Normalise the filtered time series (RMS ~ sqrt(time))
       // TODO: Avoid/hide the ugly thrust code?
       //         Consider making it a method of MatchedFilterPlan
       /*
-      thrust::constant_iterator<hd_float> 
+      thrust::constant_iterator<hd_float>
         norm_val_iter(1.0 / sqrt((hd_float)rel_filter_width));
       thrust::transform(thrust::device_ptr<hd_float>(filtered_series),
                         thrust::device_ptr<hd_float>(filtered_series)
@@ -530,6 +531,26 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                         thrust::multiplies<hd_float>());
 
       stop_timer(filter_timer);
+
+	// WRITE OUT THE NORMALISED TIMESERIES
+
+	/*if ( dm_idx == 1 && filter_width == 1 && first_idx > 6000000)
+	{
+
+
+		std::ofstream norm_data ("norm_data_dm_00197462_samp_6025216.dat", std::ofstream::out | std::ofstream::trunc);
+
+		for (size_t sample = 0; sample < series_stride; sample++)
+			norm_data << sample << " " << pl->d_filtered_series[sample] << endl;
+
+
+		norm_data.close();
+
+		cout << "Normalised data saved...\n";
+		std::cin.get();
+
+
+	}*/
 
       if( beam == 0 && dm_idx == write_dm && first_idx == 0 &&
           filter_width == 8 ) {
@@ -556,14 +577,14 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                                 d_giant_inds,
                                 d_giant_begins,
                                 d_giant_ends);
-      
+
       if( error != HD_NO_ERROR ) {
         return throw_error_heimdall(error);
       }
-      
+
       hd_size rel_cur_filtered_offset = (cur_filtered_offset /
                                          rel_tscrunch_width);
-      
+
       using namespace thrust::placeholders;
       thrust::transform(d_giant_inds.begin()+prev_giant_count,
                         d_giant_inds.end(),
@@ -596,11 +617,13 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       }
 
     } // End of filter width loop
+
+
   } // End of DM loop
 
   hd_size giant_count = d_giant_peaks.size();
   if( pl->params.verbosity >= 2 ) {
-    cout << "Giant count = " << giant_count << endl;
+    cout << "Giant count = " << giant_count << endl;	// total number of giants detected over all DMs
   }
   
   start_timer(candidates_timer);
@@ -618,7 +641,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
   {
     thrust::device_vector<hd_size> d_giant_labels(giant_count);
     hd_size* d_giant_labels_ptr = thrust::raw_pointer_cast(&d_giant_labels[0]);
-  
+
     RawCandidates d_giants;
     d_giants.peaks = thrust::raw_pointer_cast(&d_giant_peaks[0]);
     d_giants.inds = thrust::raw_pointer_cast(&d_giant_inds[0]);
@@ -627,13 +650,13 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     d_giants.filter_inds = thrust::raw_pointer_cast(&d_giant_filter_inds[0]);
     d_giants.dm_inds = thrust::raw_pointer_cast(&d_giant_dm_inds[0]);
     d_giants.members = thrust::raw_pointer_cast(&d_giant_members[0]);
-  
+
     hd_size filter_count = get_filter_index(pl->params.boxcar_max) + 1;
 
     if( pl->params.verbosity >= 2 ) {
       cout << "Grouping coincident candidates..." << endl;
     }
-  
+
     hd_size label_count;
     error = label_candidate_clusters(giant_count,
                                      *(ConstRawCandidates*)&d_giants,
@@ -645,12 +668,12 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     if( error != HD_NO_ERROR ) {
       return throw_error_heimdall(error);
     }
-  
+
     hd_size group_count = label_count;
     if( pl->params.verbosity >= 2 ) {
       cout << "Candidate count = " << group_count << endl;
     }
-  
+
     thrust::device_vector<hd_float> d_group_peaks(group_count);
     thrust::device_vector<hd_size>  d_group_inds(group_count);
     thrust::device_vector<hd_size>  d_group_begins(group_count);
@@ -658,9 +681,9 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     thrust::device_vector<hd_size>  d_group_filter_inds(group_count);
     thrust::device_vector<hd_size>  d_group_dm_inds(group_count);
     thrust::device_vector<hd_size>  d_group_members(group_count);
-  
+
     thrust::device_vector<hd_float> d_group_dms(group_count);
-  
+
     RawCandidates d_groups;
     d_groups.peaks = thrust::raw_pointer_cast(&d_group_peaks[0]);
     d_groups.inds = thrust::raw_pointer_cast(&d_group_inds[0]);
@@ -669,7 +692,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     d_groups.filter_inds = thrust::raw_pointer_cast(&d_group_filter_inds[0]);
     d_groups.dm_inds = thrust::raw_pointer_cast(&d_group_dm_inds[0]);
     d_groups.members = thrust::raw_pointer_cast(&d_group_members[0]);
-  
+
     merge_candidates(giant_count,
                      d_giant_labels_ptr,
                      *(ConstRawCandidates*)&d_giants,
@@ -810,10 +833,10 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		if( pl->params.verbosity >= 2 )
 			cout << "No candidated deteced. Will not create a file..." << endl;
 	}
-  	
+
 	stop_timer(candidates_timer);
   	stop_timer(total_timer);
-  
+
 	#ifdef HD_BENCHMARK
   	if( pl->params.verbosity >= 1 )
   	{
@@ -835,7 +858,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
                        		giants_timer.getTime() +
                        		candidates_timer.getTime());
   	hd_float misc_time = total_timer.getTime() - time_sum;
-  
+
   /*
   std::ofstream timing_file("timing.dat", std::ios::app);
   timing_file << total_timer.getTime() << "\t"

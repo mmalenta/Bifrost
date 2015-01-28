@@ -413,7 +413,7 @@ int main(int argc, char* argv[])
 	std::cout << "Executing dedispersion" << std::endl;
 
 	if (args.progress_bar)
-    	std::cout << "Starting dedispersion...\n";
+	std::cout << "Starting dedispersion...\n";
 
   	timers["dedispersion"].start();
  	PUSH_NVTX_RANGE("Dedisperse",3)
@@ -432,14 +432,11 @@ int main(int argc, char* argv[])
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
-	cout << "dt: " << original_plan->dt << endl;
+	perform_tests(timeseries_data_ptr, output_samps, dm_size);
 
-	// perform_tests(timeseries_data_ptr, output_samps, dm_size);
-
-	cout << "Number of samples in the timeseries: " << output_samps << endl;
-	cout << "Timeseries data size: " << output_size << endl;
-	//cout << "Trials data pointer: " << trials.get_data();
-	cout << "First data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
+	cout << "Performed tests\n";
+	
+	cin.get();
 
   	timers["dedispersion"].stop();
 
@@ -557,8 +554,6 @@ int main(int argc, char* argv[])
 
 		std::cout << "Heimdall, open the Bifrost!!\n";
 		// because Bifrost opening Heimdall sounds wrong
-
-		cout << "Second data test: " << (int)timeseries_data_ptr[0] << " " << (int)timeseries_data_ptr[1] << endl;
 
 		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
 		// don't really need the whole hd_create_pipeline in use as it only does the dedisp steps prior to the

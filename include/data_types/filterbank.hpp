@@ -40,17 +40,56 @@
 #include "utils/exceptions.hpp"
 #include <pipeline/pipeline_types.hpp>
 
+#include <thrust/copy.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #include <thrust/functional.h>
+#include <thrust/generate.h>
+#include <thrust/iterator/constant_iterator.h>
 #include <thrust/reduce.h>
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
 #include <thrust/transform.h>
+using std::cin;
 using std::cout;
 using std::endl;
 
 extern int current;
 int channel_mod (); // { current++; int modulus = current % 1024; if (modulus == 0) return 1024;
 		//		else return modulus;}
+
+// following functors will work correctly on device - no data races
+class Channel_mod_dev
+{
+        public:
+               	__host__ __device__ Channel_mod_dev(unsigned int channels) :
+                                        n_channels(channels) {};
+                __host__ __device__ double operator() (double el_index)
+                        {
+                                double modulus = (size_t)el_index % (size_t)n_channels;
+                                if (modulus == 0) return n_channels;
+                                        else return modulus;
+                        }
+        private:
+                unsigned int n_channels;
+};
+
+class Expand_mean_dev
+{
+        public:
+               	__host__ __device__ Expand_mean_dev(double *means, size_t chunk) :
+                                        my_mean(means), my_chunk(chunk) {};
+                __host__ __device__ double operator() (double el_index)
+                        {
+                                int mean_idx = (size_t)el_index / my_chunk;
+                                return my_mean[mean_idx];
+                        }
+        private:
+                double* my_mean;
+                size_t my_chunk;
+};
+
 
 /*!
   \brief Base class for handling filterbank data.
@@ -64,6 +103,9 @@ class Filterbank {
 protected:
   	//Filterbank metadata
   	unsigned char*  data; /*!< Pointer to filterbank data.*/
+	double *mean_array;	// means for different bins
+	double *stdev_array;	// standard deviations for different beans
+	unsigned int bins;	// the number of bins used to split the time series (might not use)
   	unsigned int nsamps; /*!< Number of time samples. */
   	unsigned int nchans; /*!< Number of frequecy channels. */
   	unsigned char nbits; /*!< Bits per time sample. */
@@ -337,6 +379,7 @@ public:
 
     size_t total_nsamples = (size_t) nchans * nsamples;
 
+	// move into array
     unsigned int data_point_1, data_point_2, data_point_3, data_point_4, data_point_5, data_point_6, data_point_7, data_point_8;
 
     size_t saved = 0;
@@ -404,168 +447,302 @@ public:
    this->tsamp  = new_tsamp;
    this->data   = data_new;
 
+   std::cout << "Finished averaging time samples!\n";
+
+
 	// create vector fo keys which will be corresponding to channel numbers
-	// keys_vector = 1, 2 ,3 , ... , 1024, 1, 2, 3, ... etc
-	// then reduce by key, which will sum all the samples for a given channel
+        // keys_vector = 1, 2 ,3 , ... , 1024, 1, 2, 3, ... etc
+        // then reduce by key, which will sum all the samples for a given channel
 
-	// fiin lower nearest power of 2 to the new_nsamples
+        // fiin lower nearest power of 2 to the new_nsamples
 
-	size_t power_two_nsamples = 1 << (int)floor(log2((double)new_nsamples));
-
-
-	// to avoid problems with memory process only a portion of timeseries at a time
-	// divide into 512 chunks
-	// no difference if 1/512th is processed or 1/16th
-	// use 1/512th for efficiency purposes
-	size_t to_process = power_two_nsamples / 512;
-
-	unsigned char *timesamples_to_process = new unsigned char[to_process * nchans];
-	std::copy(data_new, data_new + to_process * nchans, timesamples_to_process);
-	int *keys_array = new int[to_process * nchans];
-
-	std::generate_n(keys_array, to_process * nchans, channel_mod);
-
-	double  *sum_array = new double[nchans];
-	int *reduced_keys_array = new int[nchans];
-
-	thrust::stable_sort_by_key(keys_array, keys_array + to_process * nchans,
-					timesamples_to_process);
-
-	// timesamples_to_process is now arranged by the channel number
-	// starting with channel 1
+        size_t power_two_nsamples = 1 << (int)floor(log2((double)new_nsamples));
 
 
-	thrust::pair<int*,double*> keys_values;
+        // to avoid problems with memory process only a portion of timeseries at a time
+        // divide into 512 chunks
+        // no difference if 1/512th is processed or 1/16th
+        // use 1/512th for efficiency purposes
+        size_t to_process = power_two_nsamples; // / 512;
+        size_t data_chunk = power_two_nsamples/512; // used to process different means
 
-	keys_values = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
-			timesamples_to_process, reduced_keys_array,
-			sum_array);
+        cout << "Will process " << to_process << " time samples" << endl;
+        cout << "in chunks of " << data_chunk << " samples" << endl;
+        cout << "spanning " << (double)data_chunk * new_tsamp << " seconds" << endl;
 
-	double *factor_array = new double[nchans];
+//      unsigned char *chunk_to_process = new unsigned char[data_chunk * nchans];
+//      int *chunk_keys_array = new int[data_chunk * nchans];
 
-	std::fill(factor_array, factor_array + nchans, (1.0/(double)to_process));
+        // need to move these array to device vectors
 
-	double *mean_array = new double[nchans];
+        // Thrust vectors automatically deleted when the function returns
+        thrust::equal_to<int> binary_pred;
+        thrust::plus<double> binary_op;
 
-	thrust::transform(sum_array, sum_array + nchans, factor_array, mean_array,
-				thrust::multiplies<double>());
+        thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans);
+        thrust::device_vector<double> d_chunk_keys_array(data_chunk * nchans);
+        thrust::device_vector<double> d_reduced_chunk_keys_array(nchans);
+        thrust::device_vector<double> d_chunk_sum_array(nchans);
+        thrust::device_vector<double> d_chunk_mean_array(nchans);
+        thrust::device_vector<double> d_chunk_mean_expand_array(data_chunk * nchans);
+        thrust::device_vector<double> d_chunk_diff_array(data_chunk * nchans);
+        thrust::device_vector<double> d_chunk_diff_sqr_array(data_chunk * nchans);
+        thrust::device_vector<double> d_chunk_var_array(nchans);
+
+        thrust::device_vector<double> d_full_chunk_mean(512);
+        thrust::device_vector<double> d_full_chunk_var(512);
+
+/*      int *reduced_chunk_keys_array = new int[nchans];
+        double *chunk_sum_array = new double[nchans];
+        double *chunk_mean_array = new double[nchans];
+        double *chunk_mean_expand_array = new double[data_chunk * nchans];
+        double *chunk_diff_array = new double[data_chunk * nchans];
+        double *chunk_diff_sqr_array = new double[data_chunk * nchans];
+        double *chunk_var_array = new double[nchans];
+*/
+        thrust::constant_iterator<double> rec_chunk_start(1.0/(double)data_chunk);
+        thrust::constant_iterator<double> rec_chunk_end = rec_chunk_start + nchans;
+
+        double *full_chunk_mean = new double[512];
+        double *full_chunk_var = new double[512];
+        double *full_chunk_std = new double[512];
+
+	// device iterators for thrust::pair
+        typedef thrust::device_vector<int>::iterator intIter;
+        typedef thrust::device_vector<double>::iterator doubIter;
+
+        for (int chunk_no = 0; chunk_no < 512; chunk_no++)
+        {
+
+                int chunk_no_extra = chunk_no + 1;
+
+//              thrust::device_vector<double> d_chunk_to_process((double*)data_new + chunk_no * data_chu$
+//                                (double*)data_new + chunk_no_extra * data_chunk * nchans);
+
+                cout << "Processing chunk number " << chunk_no << "\r";
+		cout.flush();
+                // if (chunk_no + 1) used - treated as type casting
+
+                thrust::copy(data_new + chunk_no * data_chunk * nchans,
+                                data_new + chunk_no_extra * data_chunk * nchans,
+                                d_chunk_to_process.begin());
+
+                thrust::sequence(d_chunk_keys_array.begin(), d_chunk_keys_array.end(), 1);
+
+                thrust::transform(d_chunk_keys_array.begin(),
+                                        d_chunk_keys_array.end(),
+                                        d_chunk_keys_array.begin(),
+                                        Channel_mod_dev(nchans));
+
+                thrust::stable_sort_by_key(d_chunk_keys_array.begin(), d_chunk_keys_array.end(),
+                                                d_chunk_to_process.begin());
+
+                // device iterators returned, not just ordinary pointers!!
+                thrust::pair<doubIter,doubIter> chunk_keys_values;
+
+                // sums time samples for each channel
+                chunk_keys_values = thrust::reduce_by_key(d_chunk_keys_array.begin(),
+                                        d_chunk_keys_array.end(),
+                                        d_chunk_to_process.begin(), d_reduced_chunk_keys_array.begin(),
+                                        d_chunk_sum_array.begin(),
+                                        binary_pred, binary_op);
+
+                thrust::transform(d_chunk_sum_array.begin(), d_chunk_sum_array.end(), 
+                                        rec_chunk_start, d_chunk_mean_array.begin(),
+                                thrust::multiplies<double>());
+
+                /*if(chunk_no == 407)
+               	{
+                       	for (int i = 0; i < nchans; i++)
+                               	cout << d_chunk_mean_array[i] << " ";
+                       	cout << endl << endl;
+
+                       	std::cin.get();
+
+               	} */
+                // stuff goes badly here
+                full_chunk_mean[chunk_no] = thrust::reduce(d_chunk_mean_array.begin(),
+                                                d_chunk_mean_array.end(),
+                                                (double)0.0, binary_op) / (double)nchans;
 
 
-	double *rms_array = new double[nchans];
+                // CALCULATE VARIANCE BELOW
+                // for each sample in the channel, subtract mean for this channel
+                // use chunk_mean_array as array of channel means
+                // expand the mean for every channel
 
-	double *squared_timeseries = new double[to_process * nchans];
+                thrust::device_ptr<double> mean_ptr = d_chunk_mean_array.data();
 
-	thrust::transform(timesamples_to_process, timesamples_to_process + to_process * nchans,
-				timesamples_to_process, squared_timeseries,
-				thrust::multiplies<double>());
+                double* orig_mean = thrust::raw_pointer_cast(mean_ptr);
 
+                thrust::sequence(d_chunk_mean_expand_array.begin(),
+                                        d_chunk_mean_expand_array.end(), 0);
 
+                thrust::transform(d_chunk_mean_expand_array.begin(),
+                                        d_chunk_mean_expand_array.end(),
+                                        d_chunk_mean_expand_array.begin(),
+                                        Expand_mean_dev(orig_mean, data_chunk));
 
-	double *squares_sum_array = new double[nchans];
+                // subtract mean from values
 
-	thrust::pair<int*,double*> rms_keys_values;
-	rms_keys_values = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
-				squared_timeseries, reduced_keys_array,
-				squares_sum_array);
+                thrust::transform(d_chunk_to_process.begin(),
+                                        d_chunk_to_process.end(),
+                                        d_chunk_mean_expand_array.begin(),
+                                        d_chunk_diff_array.begin(),
+                                        thrust::minus<double>());
+                thrust::transform(d_chunk_diff_array.begin(),
+                                        d_chunk_diff_array.end(),
+                                        d_chunk_diff_array.begin(),
+                                        d_chunk_diff_sqr_array.begin(),
+                                        thrust::multiplies<double>());
 
-	double *squares_mean = new double[nchans];
+                thrust::pair<doubIter,doubIter> chunk_keys_values_2;
+                chunk_keys_values_2 = thrust::reduce_by_key(d_chunk_keys_array.begin(),
+                                        d_chunk_keys_array.end(),
+                                        d_chunk_diff_sqr_array.begin(),
+                                        d_reduced_chunk_keys_array.begin(),
+                                        d_chunk_var_array.begin(),
+                                        binary_pred, binary_op);
 
-	thrust::transform(squares_sum_array, squares_sum_array + nchans, factor_array,
-				squares_mean, thrust::multiplies<double>());
+                thrust::transform(d_chunk_var_array.begin(),
+                                        d_chunk_var_array.end(),
+                                        rec_chunk_start,
+                                        d_chunk_var_array.begin(),
+                                        thrust::multiplies<double>());
 
+                full_chunk_var[chunk_no] = thrust::reduce(d_chunk_var_array.begin(),
+                                                d_chunk_var_array.end(),
+                                                0.0, binary_op);
+                full_chunk_std[chunk_no] = sqrt(full_chunk_var[chunk_no]);
+ 	}
 
-	std::cout << "Calculating variances..." << std::endl;
+	cout <<  "Finished processing all chunks...\n";
+	cout << "Will now save\n";
 
+        std::ofstream means_out("means_values_dev.dat", std::ofstream::out | std::ofstream::trunc);
 
-	// need to calculate variance
-	// for each in timesamples_to_process, subtract mean for a given channel
-	// then square and divide by the number of time samples processed
+        for (int chunk_no = 0; chunk_no < 512; chunk_no++)
+                means_out << chunk_no << " " << full_chunk_mean[chunk_no] << " "
+                                << full_chunk_var[chunk_no] << " "
+                                << full_chunk_std[chunk_no] <<  endl;
 
-	double *channel_mean_timeseries = new double[to_process * nchans];
-	double *sample_mean_diff = new double[to_process * nchans];
-	double *sample_mean_diff_sqr = new double[to_process * nchans];
-	double *diff_sqr_sum = new double[nchans];
-	double *variance = new double[nchans];
+        means_out.close();
 
-	// expand the mean for the channel to all timesamples in a channel
-	for(int m = 0; m < nchans; m++)
+	// FINISHED MEAN AND STANDARD DEVIATION PART
+	// SMOOTHING PART START HERE
+
+        cout << "Smoothing the data\n";
+
+        // REMEMBER -- WEIGHTS MUST ADD UP TO 1!!!
+        double *smoothing_function = new double[32];
+
+        thrust::device_vector<double> d_smoothing_function(32);
+        thrust::device_vector<double> d_mean(512);
+        thrust::device_vector<double> d_variance(512);
+        thrust::device_vector<double> d_stdev(512);
+        thrust::device_vector<double> d_mean_smoothed_part(32);
+        thrust::device_vector<double> d_stdev_smoothed_part(32);
+
+        std::ifstream func_in("smoothing_function.dat");
+
+        if (!func_in.is_open())
+        {
+                cout << "Could not open the file, will use simple weighted mean as smoothing\n";
+                for (int i = 0; i < 32; i++)
+			smoothing_function[i] = (double)1.0/(double)32.0;
+        } else
 	{
-		for(size_t n = 0; n < to_process; n++)
-			channel_mean_timeseries[m*to_process + n] = mean_array[m];
+                for(int i = 0; i < 32; i++)
+                        func_in >> smoothing_function[i];
+        }
+
+	func_in.close();
+
+	thrust::copy(smoothing_function, smoothing_function + 32, d_smoothing_function.begin());
+
+        //this is a very simple smoothing function -- box with weight of 1/16
+        //thrust::fill(d_smoothing_function.begin(),
+        //              d_smoothing_function.end(),
+        //              (double)1.0/(double)32.0);
+
+        thrust::copy(full_chunk_mean, full_chunk_mean + 512, d_mean.begin());
+        thrust::copy(full_chunk_var, full_chunk_var + 512, d_variance.begin());
+        thrust::copy(full_chunk_std, full_chunk_std + 512, d_stdev.begin());
+
+        double *full_chunk_mean_smooth = new double[512];
+        double *full_chunk_var_smooth = new double[512];
+        double *full_chunk_std_smooth = new double[512];
+
+        thrust::device_ptr<double> mean_ptr = d_mean.data();
+        thrust::device_ptr<double> stdev_ptr = d_stdev.data();
+
+        thrust::plus<double> sum_op;
+
+        for (int smooth_start = 0; smooth_start < 16; smooth_start++)
+        {
+                full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr,
+                                                        mean_ptr + smooth_start +16,
+                                                        0.0, sum_op) / (double)((double)smooth_start + 16.0);
+                full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr,
+                                                        stdev_ptr + smooth_start + 16,
+                                                        0.0, sum_op) / (double)((double)smooth_start + 16.0);
+        }
+
+        for (int smooth_start = 496; smooth_start < 512; smooth_start++)
+        {
+                full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr + smooth_start - 16,
+                                                        mean_ptr + 512,
+                                                        0.0, sum_op) / (double)(512.0 - (double)smooth_start + 16.0);
+                full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr + smooth_start - 16,
+                                                        stdev_ptr + 512,
+                                                        0.0, sum_op) / (double)(512.0 - (double)smooth_start + 16.0);
+        }
+
+	for (int smooth_start = 16; smooth_start < 496; smooth_start++)
+        {
+                thrust::transform(mean_ptr + smooth_start - 16,
+                                        mean_ptr + smooth_start + 16,
+                                        d_smoothing_function.begin(),
+                                        d_mean_smoothed_part.begin(), thrust::multiplies<double>());
+
+                thrust::transform(stdev_ptr + smooth_start - 16,
+                                        stdev_ptr + smooth_start + 16,
+                                        d_smoothing_function.begin(),
+                                        d_stdev_smoothed_part.begin(), thrust::multiplies<double>());
+                full_chunk_mean_smooth[smooth_start] = thrust::reduce(d_mean_smoothed_part.begin(),
+                                                                d_mean_smoothed_part.end(),
+                                                                0.0, sum_op);
+
+                full_chunk_std_smooth[smooth_start] = thrust::reduce(d_stdev_smoothed_part.begin(),
+                                                                d_stdev_smoothed_part.end(),
+                                                                0.0, sum_op);
 	}
 
-	// (x - <x>) step
-	thrust::transform(timesamples_to_process, timesamples_to_process + nchans * to_process,
-				channel_mean_timeseries, sample_mean_diff,
-				thrust::minus<double>());
-	// (x - <x>)^2 step
-	thrust::transform(sample_mean_diff, sample_mean_diff + nchans * to_process,
-				sample_mean_diff, sample_mean_diff_sqr,
-				thrust::multiplies<double>());
+	        std::ofstream smooth_out("means_values_smooth_full.dat",
+                                        std::ofstream::out | std::ofstream::trunc);
 
-	thrust::pair<int*,double*> difference_reduction;
-	difference_reduction = thrust::reduce_by_key(keys_array, keys_array + to_process * nchans,
-				sample_mean_diff_sqr, reduced_keys_array,
-				diff_sqr_sum);
+        for (int chunk_idx = 0; chunk_idx < 512; chunk_idx++)
+                smooth_out << chunk_idx << " " << full_chunk_mean_smooth[chunk_idx]
+                        << " " << full_chunk_std_smooth[chunk_idx] << endl;
+/*
+        delete [] chunk_to_process;
+        delete [] chunk_keys_array;
+        delete [] reduced_chunk_keys_array;
+        delete [] chunk_sum_array;
+        delete [] chunk_mean_array;
+        delete [] full_chunk_mean;
+        delete [] chunk_mean_expand_array;
+        delete [] chunk_diff_array;
+        delete [] chunk_diff_sqr_array;
+        delete [] chunk_var_array;
+*/
 
-	thrust::transform(diff_sqr_sum, diff_sqr_sum + nchans,
-				factor_array, variance, thrust::multiplies<double>());
-
-	for(int i = 0; i < nchans; i++) rms_array[i] = sqrt(squares_mean[i]);
-
-	std::ofstream means ("mean_values.dat", std::ofstream::out | std::ofstream::trunc);
-
-	for(int j = 0; j < nchans; j++) means <<  j+1 << " " << (int)mean_array[j] 
-						<< " " << (int)rms_array[j]
-						<< " " << (int)variance[j] << endl;
-
-	delete[] rms_array;
-
-	double channels_sum;
-	double channels_mean;
-	double channels_variance;
-
-	channels_sum = thrust::reduce(mean_array, mean_array + nchans, 0);
-
-	channels_mean = channels_sum / (double)1024;
-
-	double *mean_expand = new double[nchans];
-	double *channels_mean_diff = new double[nchans];
-	double *channels_mean_diff_sqr = new double[nchans];
-
-	std::fill(mean_expand, mean_expand + nchans, channels_mean);
-
-	thrust::transform(mean_array, mean_array + nchans, mean_expand,
-				channels_mean_diff, thrust::minus<double>());
-
-	thrust::transform(channels_mean_diff, channels_mean_diff + nchans,
-				channels_mean_diff, channels_mean_diff_sqr,
-				thrust::multiplies<double>());
-
-	channels_variance = thrust::reduce(channels_mean_diff_sqr,
-		channels_mean_diff_sqr + nchans, 0);
-
-	channels_variance /= (double)1024;
-
-	means << endl << endl << "Channels mean: " << channels_mean
-		<< endl << "Channels variance: " << channels_variance;
-
-	thrust::plus<double> binary_op;
-
-	double total_variance = thrust::reduce(variance, variance + nchans, 0.0, binary_op);
-	double total_mean = thrust::reduce(mean_array, mean_array + nchans, 0.0, binary_op);
-	double standard_dev = sqrt(total_variance);
+	this->mean_array = full_chunk_mean_smooth;
+	this->stdev_array = full_chunk_std_smooth;
 
 
-	means << endl << endl << "Total variance: " << total_variance
-		<< endl << "Mean sum: " << total_mean
-		<< endl << "Standard deviation: " << standard_dev;
+	// OLD CODE STARTS BELOW
 
-	means.close();
-
-	fil_total_mean = total_mean;
-	fil_variance = total_variance;
-	fil_std_dev = standard_dev;
 
 	// NO NEED FOR COVARIANCE MATRIX NOW - USE WHEN STUFF GOES WRONG
 /*
@@ -645,60 +822,9 @@ public:
 
 */
 
-	delete[] squares_mean;
-	delete[] squares_sum_array;
-	delete[] squared_timeseries;
-	delete[] mean_array;
-	delete[] factor_array;
-	delete[] reduced_keys_array;
-	delete[] sum_array;
-	delete[] timesamples_to_process;
-	delete[] sample_mean_diff;
-	delete[] sample_mean_diff_sqr;
-	delete[] diff_sqr_sum;
-	delete[] variance;
-	delete[] mean_expand;
-	delete[] channels_mean_diff;
-	delete[] channels_mean_diff_sqr;
-//	delete[] covariance_matrix;
-//	delete[] sample_mean_diff_trans;
-//	delete[] mask_array;
-
-//	std::vector<unsigned char> timesamples_to_process(data_new,
-//					data_new + to_process * nchans);
-
-//	std::vector<unsigned char> sorted_timesamples(to_process * nchans);
-
-//	std::vector<int> keys_vector(to_process*nchans);
-//	std::vector<size_t> sum_vector(nchans);
-//	std::vector<int> reduced_keys_vector(nchans);
-//	std::generate_n(keys_vector.begin(), to_process*nchans, channel_mod);
-
-//	thrust::stable_sort_by_key(keys_vector.begin(), keys_vector.end(),
-//					sorted_timesamples.begin());
-//	thrust::pair<std::vector<int>::iterator,std::vector<size_t>::iterator> keys_values;
-//	keys_values = thrust::reduce_by_key(keys_vector.begin(), keys_vector.end(),
-//				sorted_timesamples.begin(), reduced_keys_vector.begin(),
-//				sum_vector.begin());
-
-
-//	cout << "Testing the keys_vector: ";
-//	for (int i = 0; i < 2048; i++) cout << keys_vector[i] << " ";
-
-//	std::cin.get();
-
-//	thrust::reduce_by_key(
-
-//	std::cout << "Printing some results\n";
-// 	std::cout << (int)data_new[0] << " " << (int)data_temp[0] <<  " " << (int)data_temp[hdr.nchans] << std::endl;
-
-//   	std::cout << (int)this->data[0] << std::endl;
-//  	std::cout << this->tsamp << std::endl;
-
 	delete [] data_temp;		// cleaning
 
 
-   std::cout << "Finished averaging time samples!\n";
 
    }
 

@@ -8,7 +8,7 @@ MAX_DM = 2000
 class Classifier(object):
     def __init__(self):
         self.nbeams      = 13
-        self.snr_cut     = 6.5
+        self.snr_cut     = 10.0
         self.members_cut = 3
         self.nbeams_cut  = 2
         self.dm_cut      = 1.5

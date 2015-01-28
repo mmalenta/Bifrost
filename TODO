@@ -12,9 +12,9 @@
 
 * check for possible problems with texture memory -- WORKING FINE AT LEAST IN THE 0 - 3000 DM RANGE
 
-* plotting the data -- something is broken
+* plotting the data -- something is broken -- DONE, but still not perfect, change the script a bit
 
-* time it properly and compare to Heimdall
+* time it properly and compare to Heimdall -- ~DONE - need more tests, but generally faster
 
 * fix the utc_start = 0 when writing out candidates -- DONE
 
@@ -28,4 +28,6 @@
 
 * total execution time for whole program -- DONE
 
-* clean up mean, rms and variance calculations
+* clean up mean, rms and variance calculations (use Thrust constant iterator)
+
+* remove excessive verbosity 

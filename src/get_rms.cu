@@ -29,7 +29,8 @@ public:
 		// This algorithm works by taking the absolute values of the data
 		//   and then repeatedly scrunching them using median-of-5 in order
 		//   to approximate the median absolute deviation. The RMS is then
-		//   just 1.4862 times this.
+		//   just 1.4862 times this - relationship between RMS and MAD
+		//   for normal distribution
 		
 		buf1.resize(count);
 		buf2.resize(count/5);

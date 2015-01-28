@@ -5,6 +5,8 @@
  *
  ***************************************************************************/
 
+#include <iostream>
+#include <fstream>
 #include <pipeline/matched_filter.hpp>
 #include <pipeline/strided_range.hpp>
 #include <utils/exceptions.hpp>
@@ -29,9 +31,21 @@ public:
 		m_scanned.resize(count + 1);
 		thrust::exclusive_scan(d_in_begin, d_in_end + 1,
 		                       m_scanned.begin());
+
+//		std::ofstream scan_out("scan_out.dat", std::ofstream::out | std::ofstream::trunc);
+//		std::ofstream orig_data("orig_data.dat", std::ofstream::out | std::ofstream::trunc);
+
+
+/*		for (size_t i = 0; i < count + 1; i++)
+		{
+			orig_data << *(d_in_begin + i) << std::endl;
+			scan_out << m_scanned[i] << std::endl;
+		}
+		scan_out.close(); */
+
 		return HD_NO_ERROR;
 	}
-	
+
 	// Note: This writes div_round_up(count + 1 - max_width, tscrunch) values to d_out
 	//         with a relative starting offset of max_width/2
 	// Note: This does not apply any normalisation to the output
@@ -42,14 +56,22 @@ public:
 		thrust::device_ptr<T> d_out_begin(d_out);
 		
 		hd_size offset    = m_max_width / 2;
+
+		// ahead and behind are the same except for the case when filter_width = 1
 		hd_size ahead     = (filter_width-1)/2+1;   // Divide and round up
 		hd_size behind    = filter_width / 2;       // Divide and round down
 		hd_size out_count = m_scanned.size() - m_max_width;
 		
+
 		hd_size stride = tscrunch;
-		
+
+//		std::cout << "filter width = " << filter_width << std::endl;
+//		std::cout << "ahead = " << ahead << std::endl;
+//		std::cout << "behind = " << behind << std::endl;
+//		std::cout << "stride = " << stride << std::endl;
+
 		typedef typename thrust::device_vector<T>::iterator Iterator;
-		
+
 		// Striding through the scanned array has the same effect as tscrunching
 		// TODO: Think about this carefully. Does it do exactly what we want?
 		strided_range<Iterator> in_range1(m_scanned.begin()+offset + ahead,
@@ -58,12 +80,33 @@ public:
 		strided_range<Iterator> in_range2(m_scanned.begin()+offset - behind,
 		                                  m_scanned.begin()+offset - behind + out_count,
 		                                  stride);
-		
+
+
 		thrust::transform(in_range1.begin(), in_range1.end(),
 		                  in_range2.begin(),
 		                  d_out_begin,
 		                  thrust::minus<T>());
-		
+
+/*		if (filter_width == 512)
+		{
+			std::ofstream first_range("first_range.dat", std::ofstream::out | std::ofstream::trunc);
+			std::ofstream second_range("second_range.dat", std::ofstream::out | std::ofstream::trunc);
+			std::ofstream difference("difference.dat", std::ofstream::out | std::ofstream::trunc);
+
+			for (size_t i = 0; i < out_count; i++)
+			{
+				first_range << *(in_range1.begin() + i) << std::endl;
+				second_range << *(in_range2.begin() + i) << std::endl;
+				difference << *(d_out_begin +i) << std::endl;
+			}
+
+			first_range.close();
+			second_range.close();
+			difference.close();
+			
+			std::cout << "Saved some data...";
+			exit(0);
+		} */
 		return HD_NO_ERROR;
 	}
 };
