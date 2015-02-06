@@ -44,6 +44,7 @@
 #include <thrust/device_ptr.h>
 #include <thrust/device_vector.h>
 #include <thrust/execution_policy.h>
+#include <thrust/fill.h>
 #include <thrust/functional.h>
 #include <thrust/generate.h>
 #include <thrust/iterator/constant_iterator.h>
@@ -90,6 +91,19 @@ class Expand_mean_dev
                 size_t my_chunk;
 };
 
+class Timesample_index
+{
+       	public:
+               	__host__ __device__ Timesample_index(int chans) : chans_no(chans) {};
+
+                __host__ __device__ int operator() (int el_index)
+                       	{
+                               	int samp_idx = (el_index / chans_no) + 1;
+                               	return samp_idx;
+                        }
+        private:
+                size_t chans_no;
+};
 
 /*!
   \brief Base class for handling filterbank data.
@@ -247,6 +261,10 @@ public:
 	size_t bytes_read = nsamps * nchan_bytes;	// for now
 	return bytes_read / nchan_bytes;
   }
+
+	virtual double* get_mean_array(void){return this->mean_array;}
+
+	virtual double* get_stdev_array(void){return this->stdev_array;}
 
   /*!
     \brief Set the filterbank data pointer.
@@ -480,6 +498,17 @@ public:
         thrust::plus<double> binary_op;
 
         thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans);
+        thrust::device_vector<int> d_reduced_chunk_keys(data_chunk);
+        thrust::device_vector<double> d_chunk_timesamples_double(data_chunk);
+        thrust::device_vector<double> d_single_timesample(nchans);
+        thrust::device_vector<double> d_chunk_timesamples(data_chunk);
+        thrust::device_vector<double> d_chunk_timesamples_diff(data_chunk);
+        thrust::device_vector<double> d_chunk_timesamples_diff_sqr(data_chunk);
+        thrust::device_vector<int> d_timesample_index(data_chunk * nchans);
+        thrust::device_vector<double> d_chunk_mean(data_chunk);
+
+
+/*        thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans);
         thrust::device_vector<double> d_chunk_keys_array(data_chunk * nchans);
         thrust::device_vector<double> d_reduced_chunk_keys_array(nchans);
         thrust::device_vector<double> d_chunk_sum_array(nchans);
@@ -491,7 +520,7 @@ public:
 
         thrust::device_vector<double> d_full_chunk_mean(512);
         thrust::device_vector<double> d_full_chunk_var(512);
-
+*/
 /*      int *reduced_chunk_keys_array = new int[nchans];
         double *chunk_sum_array = new double[nchans];
         double *chunk_mean_array = new double[nchans];
@@ -506,6 +535,10 @@ public:
         double *full_chunk_mean = new double[512];
         double *full_chunk_var = new double[512];
         double *full_chunk_std = new double[512];
+        double *front_end_mean_diff = new double[512];  // hold a mean difference in signals from first 25 and last 20 channels
+                                                        // between given chunk and first chunk (chunk 0)
+                                                        // used to scale the mean up or down
+
 
 	// device iterators for thrust::pair
         typedef thrust::device_vector<int>::iterator intIter;
@@ -516,105 +549,68 @@ public:
 
                 int chunk_no_extra = chunk_no + 1;
 
-//              thrust::device_vector<double> d_chunk_to_process((double*)data_new + chunk_no * data_chu$
-//                                (double*)data_new + chunk_no_extra * data_chunk * nchans);
-
                 cout << "Processing chunk number " << chunk_no << "\r";
 		cout.flush();
                 // if (chunk_no + 1) used - treated as type casting
 
-                thrust::copy(data_new + chunk_no * data_chunk * nchans,
+              	thrust::copy(data_new + chunk_no * data_chunk * nchans,
                                 data_new + chunk_no_extra * data_chunk * nchans,
                                 d_chunk_to_process.begin());
 
-                thrust::sequence(d_chunk_keys_array.begin(), d_chunk_keys_array.end(), 1);
+                thrust::device_ptr<double> sample_ptr = d_chunk_to_process.data();
 
-                thrust::transform(d_chunk_keys_array.begin(),
-                                        d_chunk_keys_array.end(),
-                                        d_chunk_keys_array.begin(),
-                                        Channel_mod_dev(nchans));
+                full_chunk_mean[chunk_no] = (double)thrust::reduce(d_chunk_to_process.begin(),
+                                                                        d_chunk_to_process.end(),
+                                                                        0,
+                                                                        binary_op) / (double)data_chunk;
+                thrust::sequence(d_timesample_index.begin(), d_timesample_index.end(), 0, 1);
 
-                thrust::stable_sort_by_key(d_chunk_keys_array.begin(), d_chunk_keys_array.end(),
-                                                d_chunk_to_process.begin());
+                thrust::transform(d_timesample_index.begin(),
+                                        d_timesample_index.end(),
+                                        d_timesample_index.begin(),
+                                        Timesample_index(nchans));
 
-                // device iterators returned, not just ordinary pointers!!
-                thrust::pair<doubIter,doubIter> chunk_keys_values;
+                thrust::pair<intIter,doubIter> chunk_keys_values;
 
-                // sums time samples for each channel
-                chunk_keys_values = thrust::reduce_by_key(d_chunk_keys_array.begin(),
-                                        d_chunk_keys_array.end(),
-                                        d_chunk_to_process.begin(), d_reduced_chunk_keys_array.begin(),
-                                        d_chunk_sum_array.begin(),
-                                        binary_pred, binary_op);
+                chunk_keys_values = thrust::reduce_by_key(d_timesample_index.begin(),
+                                                                d_timesample_index.end(),
+                                                                d_chunk_to_process.begin(),
+                                                                d_reduced_chunk_keys.begin(),
+                                                                d_chunk_timesamples.begin(),
+                                                                binary_pred,
+                                                                binary_op);
 
-                thrust::transform(d_chunk_sum_array.begin(), d_chunk_sum_array.end(), 
-                                        rec_chunk_start, d_chunk_mean_array.begin(),
-                                thrust::multiplies<double>());
+                thrust::constant_iterator<double> channels_mean(full_chunk_mean[chunk_no]);
 
-                /*if(chunk_no == 407)
-               	{
-                       	for (int i = 0; i < nchans; i++)
-                               	cout << d_chunk_mean_array[i] << " ";
-                       	cout << endl << endl;
+                thrust::fill(d_chunk_mean.begin(), d_chunk_mean.end(), full_chunk_mean[chunk_no]);
 
-                       	std::cin.get();
-
-               	} */
-                // stuff goes badly here
-                full_chunk_mean[chunk_no] = thrust::reduce(d_chunk_mean_array.begin(),
-                                                d_chunk_mean_array.end(),
-                                                (double)0.0, binary_op) / (double)nchans;
-
-
-                // CALCULATE VARIANCE BELOW
-                // for each sample in the channel, subtract mean for this channel
-                // use chunk_mean_array as array of channel means
-                // expand the mean for every channel
-
-                thrust::device_ptr<double> mean_ptr = d_chunk_mean_array.data();
-
-                double* orig_mean = thrust::raw_pointer_cast(mean_ptr);
-
-                thrust::sequence(d_chunk_mean_expand_array.begin(),
-                                        d_chunk_mean_expand_array.end(), 0);
-
-                thrust::transform(d_chunk_mean_expand_array.begin(),
-                                        d_chunk_mean_expand_array.end(),
-                                        d_chunk_mean_expand_array.begin(),
-                                        Expand_mean_dev(orig_mean, data_chunk));
-
-                // subtract mean from values
-
-                thrust::transform(d_chunk_to_process.begin(),
-                                        d_chunk_to_process.end(),
-                                        d_chunk_mean_expand_array.begin(),
-                                        d_chunk_diff_array.begin(),
+		                thrust::transform(d_chunk_timesamples.begin(),
+                                        d_chunk_timesamples.end(),
+                                        d_chunk_mean.begin(),
+                                        d_chunk_timesamples_diff.begin(),
                                         thrust::minus<double>());
-                thrust::transform(d_chunk_diff_array.begin(),
-                                        d_chunk_diff_array.end(),
-                                        d_chunk_diff_array.begin(),
-                                        d_chunk_diff_sqr_array.begin(),
+
+                thrust::transform(d_chunk_timesamples_diff.begin(),
+                                        d_chunk_timesamples_diff.end(),
+                                        d_chunk_timesamples_diff.begin(),
+                                        d_chunk_timesamples_diff_sqr.begin(),
                                         thrust::multiplies<double>());
 
-                thrust::pair<doubIter,doubIter> chunk_keys_values_2;
-                chunk_keys_values_2 = thrust::reduce_by_key(d_chunk_keys_array.begin(),
-                                        d_chunk_keys_array.end(),
-                                        d_chunk_diff_sqr_array.begin(),
-                                        d_reduced_chunk_keys_array.begin(),
-                                        d_chunk_var_array.begin(),
-                                        binary_pred, binary_op);
+                full_chunk_var[chunk_no] = thrust::reduce(d_chunk_timesamples_diff_sqr.begin(),
+                                                                d_chunk_timesamples_diff_sqr.end(),
+                                                                0.0,
+                                                                binary_op) / (double)data_chunk;
 
-                thrust::transform(d_chunk_var_array.begin(),
-                                        d_chunk_var_array.end(),
-                                        rec_chunk_start,
-                                        d_chunk_var_array.begin(),
-                                        thrust::multiplies<double>());
-
-                full_chunk_var[chunk_no] = thrust::reduce(d_chunk_var_array.begin(),
-                                                d_chunk_var_array.end(),
-                                                0.0, binary_op);
                 full_chunk_std[chunk_no] = sqrt(full_chunk_var[chunk_no]);
- 	}
+
+	}
+	//const double first_mean_diff = front_end_mean_diff[0];
+
+	//for (int chunk_no = 0; chunk_no < 512; chunk_no++)
+        //        front_end_mean_diff[chunk_no] = first_mean_diff - front_end_mean_diff[chunk_no];
+
+
+	//fil_total_mean = full_chunk_mean[0] * nchans;
 
 	cout <<  "Finished processing all chunks...\n";
 	cout << "Will now save\n";
@@ -736,6 +732,14 @@ public:
         delete [] chunk_diff_sqr_array;
         delete [] chunk_var_array;
 */
+
+//	for (int chunk_no = 0; chunk_no < 512; chunk_no++)
+//		full_chunk_mean_smooth[chunk_no] = full_chunk_mean_smooth[chunk_no] * (double)1024.0 +
+//							front_end_mean_diff[chunk_no] * (double)1024.0;
+
+	cout << fil_total_mean << " " << full_chunk_mean_smooth[0];
+
+	cin.get();
 
 	this->mean_array = full_chunk_mean_smooth;
 	this->stdev_array = full_chunk_std_smooth;
