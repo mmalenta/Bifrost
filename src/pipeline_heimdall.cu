@@ -348,7 +348,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
 		// PRINT OUT TIMESERIES DATA FOR DM OF INTEREST
 
-		/*if (dm_idx == 1 && first_idx == 5238784)
+/*		if (dm_idx == 1 && first_idx == 5238784)
 		{
 			std::ofstream times_data ("times_data_samp_5238784.dat", std::ofstream::out | std::ofstream::trunc);
 			for ( size_t sample = 0; sample < series_stride; sample ++)
@@ -358,7 +358,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
 			times_data.close();
 			std::cin.get();
-		}*/
+		} */
 
 
 /*    	switch( pl->params.dm_nbits )
@@ -423,6 +423,9 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     	// ---------
     	start_timer(normalise_timer);
     	hd_float rms = rms_getter.exec(time_series, cur_nsamps);
+	
+	//cout << "RMS = " << rms << endl;
+
 	// devides the data by RMS
 
     	thrust::transform(d_time_series.begin(), d_time_series.end(),

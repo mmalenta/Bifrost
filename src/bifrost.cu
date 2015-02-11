@@ -432,11 +432,11 @@ int main(int argc, char* argv[])
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
-	perform_tests(timeseries_data_ptr, output_samps, dm_size);
+	//perform_tests(timeseries_data_ptr, output_samps, dm_size);
 
-	cout << "Performed tests\n";
+	//cout << "Performed tests\n";
 	
-	cin.get();
+//	cin.get();
 
   	timers["dedispersion"].stop();
 

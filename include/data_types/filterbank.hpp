@@ -499,7 +499,8 @@ public:
 
         thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans);
         thrust::device_vector<int> d_reduced_chunk_keys(data_chunk);
-        thrust::device_vector<double> d_chunk_timesamples_double(data_chunk);
+        thrust::device_vector<bool> d_killmask_chunk(data_chunk * nchans);	// killmask for the entire time chunk
+	thrust::device_vector<double> d_chunk_timesamples_double(data_chunk);
         thrust::device_vector<double> d_single_timesample(nchans);
         thrust::device_vector<double> d_chunk_timesamples(data_chunk);
         thrust::device_vector<double> d_chunk_timesamples_diff(data_chunk);
@@ -535,10 +536,28 @@ public:
         double *full_chunk_mean = new double[512];
         double *full_chunk_var = new double[512];
         double *full_chunk_std = new double[512];
-        double *front_end_mean_diff = new double[512];  // hold a mean difference in signals from first 25 and last 20 channels
+        //double *front_end_mean_diff = new double[512];  // hold a mean difference in signals from first 25 and last 20 channels
                                                         // between given chunk and first chunk (chunk 0)
                                                         // used to scale the mean up or down
+	bool *killmask_array = new bool[nchans];
 
+	for (int ii = 0; ii < 25; ii++)
+                killmask_array[ii] = 1;
+
+        for (int ii = 25; ii < 1004; ii++)
+                killmask_array[ii] = 1;
+
+        for (int ii = 1004; ii < 1024; ii++)
+                killmask_array[ii] = 1;
+
+        thrust::device_ptr<bool> killmask_ptr = d_killmask_chunk.data();
+
+        for (int time_samp = 0; time_samp < data_chunk; time_samp++)
+                thrust::copy_n(killmask_array, 1024, killmask_ptr + nchans * time_samp);
+
+        int unmasked_channel = thrust::count(d_killmask_chunk.begin(), d_killmask_chunk.end(), 1) / data_chunk;
+
+        cout << unmasked_channel << " unmasked channels\n";
 
 	// device iterators for thrust::pair
         typedef thrust::device_vector<int>::iterator intIter;
@@ -558,6 +577,13 @@ public:
                                 d_chunk_to_process.begin());
 
                 thrust::device_ptr<double> sample_ptr = d_chunk_to_process.data();
+
+                // multiply by killmask
+                thrust::transform(d_chunk_to_process.begin(),
+                                        d_chunk_to_process.end(),
+                                        d_killmask_chunk.begin(),
+                                        d_chunk_to_process.begin(),
+                                        thrust::multiplies<double>());
 
                 full_chunk_mean[chunk_no] = (double)thrust::reduce(d_chunk_to_process.begin(),
                                                                         d_chunk_to_process.end(),
@@ -737,13 +763,21 @@ public:
 //		full_chunk_mean_smooth[chunk_no] = full_chunk_mean_smooth[chunk_no] * (double)1024.0 +
 //							front_end_mean_diff[chunk_no] * (double)1024.0;
 
-	cout << fil_total_mean << " " << full_chunk_mean_smooth[0];
+//	cout << fil_total_mean << " " << full_chunk_mean_smooth[0];
 
-	cin.get();
+//	cin.get();
 
 	this->mean_array = full_chunk_mean_smooth;
 	this->stdev_array = full_chunk_std_smooth;
 
+	delete [] full_chunk_mean;
+	delete [] full_chunk_var;
+	delete [] full_chunk_std;
+	delete [] killmask_array;
+
+//	delete [] full_chunk_mean_smooth;
+	delete [] full_chunk_var_smooth;
+//	delete [] full_chunk_std_smooth;
 
 	// OLD CODE STARTS BELOW
 
