@@ -32,6 +32,7 @@ public:
 						  filterbank.get_std_dev(),
 						  filterbank.get_mean_array(),
 						  filterbank.get_stdev_array(),
+						  filterbank.get_chunk_nsamps(),
 						  num_gpus,
 						  gpu_ids);
     ErrorChecker::check_dedisp_error(error,"create_plan_multi");

@@ -121,6 +121,7 @@ protected:
 	double *stdev_array;	// standard deviations for different beans
 	unsigned int bins;	// the number of bins used to split the time series (might not use)
   	unsigned int nsamps; /*!< Number of time samples. */
+	unsigned int chunk_nsamps; // number of time samples in the chunk
   	unsigned int nchans; /*!< Number of frequecy channels. */
   	unsigned char nbits; /*!< Bits per time sample. */
   	float fch1; /*!< Frequency of top channel (MHz) */
@@ -224,7 +225,8 @@ public:
     \return The number of time samples.
   */
   virtual unsigned int get_nsamps(void){return nsamps;}
-  
+
+	virtual unsigned int get_chunk_nsamps(void){return chunk_nsamps;}
   /*!
     \brief Set the number of time samples in data.
 
@@ -487,6 +489,8 @@ public:
         cout << "Will process " << to_process << " time samples" << endl;
         cout << "in chunks of " << data_chunk << " samples" << endl;
         cout << "spanning " << (double)data_chunk * new_tsamp << " seconds" << endl;
+
+	this->chunk_nsamps = data_chunk;
 
 //      unsigned char *chunk_to_process = new unsigned char[data_chunk * nchans];
 //      int *chunk_keys_array = new int[data_chunk * nchans];
