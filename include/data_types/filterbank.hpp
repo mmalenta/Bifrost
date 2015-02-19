@@ -387,7 +387,7 @@ this->data=data_temp;
 
     //averaging the time samples
 
-#define RESAMPLE 0
+#define RESAMPLE 1
 if (RESAMPLE){
     std::cout << "Averaging time samples\n";
 
