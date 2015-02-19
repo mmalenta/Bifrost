@@ -426,9 +426,9 @@ int main(int argc, char* argv[])
 
 	size_t output_size = output_samps * dm_size;
 
-	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
+	//unsigned char *timeseries_data_ptr = new unsigned char [output_size];
 
-	timeseries_data_ptr = trials.get_data();
+	unsigned char *timeseries_data_ptr = trials.get_data();
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
