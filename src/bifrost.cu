@@ -406,11 +406,11 @@ int main(int argc, char* argv[])
 	if (args.verbose)
 	{
     		std::cout << dm_list.size() << " DM trials" << std::endl;
-    		for (int ii=0;ii<dm_list.size();ii++)
-      		std::cout << dm_list[ii] << std::endl;	// print out a list of DM trials
+    		//for (int ii=;ii<dm_list.size();ii++)
+      		//std::cout << dm_list[ii] << std::endl;	// print out a list of DM trials
 	}
 
-	std::cout << "Executing dedispersion" << std::endl;
+	std::cout << "Executing dedispersion up to "<<dm_list[dm_list.size()-1] << std::endl;
 
 	if (args.progress_bar)
 	std::cout << "Starting dedispersion...\n";
@@ -426,7 +426,7 @@ int main(int argc, char* argv[])
 
 	size_t output_size = output_samps * dm_size;
 
-	unsigned char *timeseries_data_ptr = new unsigned char [output_size];
+	unsigned char *timeseries_data_ptr ;//= new unsigned char [output_size];
 
 	timeseries_data_ptr = trials.get_data();
 

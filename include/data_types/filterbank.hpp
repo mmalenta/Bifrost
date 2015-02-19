@@ -381,9 +381,14 @@ public:
     	std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
     	std::cout << "The channel bandwidht [MHz]: " << hdr.foff << std::endl;
     	std::cout << "The number of channels: " << hdr.nchans << std::endl;
+this->tsamp=hdr.tsamp;
+this->nsamps=hdr.nsamples;
+this->data=data_temp;
 
     //averaging the time samples
 
+#define RESAMPLE 1
+if (RESAMPLE){
     std::cout << "Averaging time samples\n";
 
     double new_tsamp = (double)(hdr.tsamp * 2.0);
@@ -468,6 +473,7 @@ public:
    this->data   = data_new;
 
    std::cout << "Finished averaging time samples!\n";
+}
 
 
 	// create vector fo keys which will be corresponding to channel numbers
@@ -476,7 +482,7 @@ public:
 
         // fiin lower nearest power of 2 to the new_nsamples
 
-        size_t power_two_nsamples = 1 << (int)floor(log2((double)new_nsamples));
+        size_t power_two_nsamples = 1 << (int)floor(log2((double)this->nsamps));
 
 
         // to avoid problems with memory process only a portion of timeseries at a time
@@ -488,7 +494,7 @@ public:
 
         cout << "Will process " << to_process << " time samples" << endl;
         cout << "in chunks of " << data_chunk << " samples" << endl;
-        cout << "spanning " << (double)data_chunk * new_tsamp << " seconds" << endl;
+        cout << "spanning " << (double)data_chunk * this->tsamp << " seconds" << endl;
 
 	this->chunk_nsamps = data_chunk;
 
@@ -576,8 +582,8 @@ public:
 		cout.flush();
                 // if (chunk_no + 1) used - treated as type casting
 
-              	thrust::copy(data_new + chunk_no * data_chunk * nchans,
-                                data_new + chunk_no_extra * data_chunk * nchans,
+              	thrust::copy(this->data + chunk_no * data_chunk * nchans,
+                                this->data + chunk_no_extra * data_chunk * nchans,
                                 d_chunk_to_process.begin());
 
                 thrust::device_ptr<double> sample_ptr = d_chunk_to_process.data();
@@ -864,6 +870,7 @@ public:
 
 */
 
+if(RESAMPLE)
 	delete [] data_temp;		// cleaning
 
 
