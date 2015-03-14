@@ -38,7 +38,7 @@ void hd_set_default_params(hd_params* params)
         params->rfi_tol         = 5.0;//1e-6;//1e-9; TODO: Should this be a probability instead?
         params->rfi_min_beams   = 8;
         params->boxcar_max	= 4096;//2048;//512;
-        params->detect_thresh   = 6.0;
+        params->detect_thresh   = 10.0;
         params->cand_sep_time   = 3;
         // Note: These have very little effect on the candidates, but could be important
         //         to capture (*rare*) coincident events.
@@ -48,7 +48,7 @@ void hd_set_default_params(hd_params* params)
         //params->cand_min_members = 3;
 
   // TODO: This still needs tuning!
-  params->max_giant_rate  = 0;      // Max allowed giants per minute, 0 == no limit
+  params->max_giant_rate  = 250000;      // Max allowed giants per minute, 0 == no limit
 
   params->min_tscrunch_width = 4096; // Filter width at which to begin tscrunching
 

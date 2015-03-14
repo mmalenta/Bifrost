@@ -380,7 +380,10 @@ int main(int argc, char* argv[])
     		cout << "Reading data from " << args.infilename.c_str() << endl;
 
   	timers["reading"].start();
-  	SigprocFilterbank filobj(filename);
+
+	unsigned int disp_diff = 0;		// so I don't have to make the whole thing again
+
+  	SigprocFilterbank filobj(filename, disp_diff);
   	timers["reading"].stop();
 
   	if (args.progress_bar)
@@ -571,8 +574,8 @@ int main(int argc, char* argv[])
 		params.dm_max = args.dm_end;
 		params.dm_tol = args.dm_tol;
 		params.dm_pulse_width = args.dm_pulse_width;	// expected intrinsic pulse width
-		params.dm_nbits = 8;				// not sure what it does, but safer to keep same as input data
-		params.use_scrunching =  false;
+		params.dm_nbits = 8;				// number of bits per dedispersed sample
+		params.use_scrunching = false;
 		params.gpu_id = 0; 				// need to work on this to enable multi-GPU support
 		params.detect_thresh = 6.0;
 		params.f0 = filobj.get_fch1();
@@ -584,7 +587,7 @@ int main(int argc, char* argv[])
 
 		size_t nsamps_gulp = params.nsamps_gulp;
 		size_t nbits = filobj.get_nbits();
-		size_t stride = stride = (params.nchans * nbits) / (8 * sizeof(char));
+		size_t stride = (params.nchans * nbits) / (8 * sizeof(char));
 
 		size_t original_samples = output_samps;
 

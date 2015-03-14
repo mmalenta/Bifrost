@@ -1,4 +1,4 @@
-/***************************************************************************
+/***stru************************************************************************
  *
  *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
  *   Licensed under the Academic Free License version 2.1
@@ -192,8 +192,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, dedisp_plan original_plan, h
 
 	dedisp_error derror;
 
-	if( pipeline->params.use_scrunching )
-	{
+	if( pipeline->params.use_scrunching )	{
 		derror = dedisp_enable_adaptive_dt(pipeline->dedispersion_plan,
 			pipeline->params.dm_pulse_width,
 			pipeline->params.scrunch_tol);
@@ -227,7 +226,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 			unsigned char *timeseries_data, size_t original_nsamps,
 			bool both_search)
 {
-
+	// nbits is the number of bits per sample in the original data - 8 in case of GMRT
 	hd_error error = HD_NO_ERROR;
 
   	Stopwatch total_timer;
@@ -276,6 +275,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
   	start_timer(memory_timer);
 
+	// dm_nbits is the number of bits per output dedispersed sample
  	pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
   	pl->d_time_series.resize(series_stride);
  	pl->d_filtered_series.resize(series_stride, 0);
@@ -341,25 +341,38 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
     		start_timer(copy_timer);
 
+		// for 8-bit dedispersed output
+
 		thrust::device_vector<float> d_time_series((unsigned char*)timeseries_data
 			+ offset, (unsigned char*)timeseries_data + offset + cur_nsamps);
 
+		// for 16-bit dedispersed output
+
+		//thrust::device_vector<float> d_time_series((unsigned short*)timeseries_data
+                //        + offset, (unsigned short*)timeseries_data + offset + cur_nsamps);
+
+/*		cout << (int)timeseries_data[0] << " " << (int)timeseries_data[1] << " "
+			<< (int)timeseries_data[2] << " " << (int)timeseries_data[3] << " "
+			<< d_time_series[0] << " " << d_time_series[1] <<  endl;
+
+		cin.get();
+*/
 		hd_float *time_series = thrust::raw_pointer_cast(&d_time_series[0]);
 
 		// PRINT OUT TIMESERIES DATA FOR DM OF INTEREST
 
-/*		if (dm_idx == 1 && first_idx == 5238784)
+/*		if (dm_idx == 1)
 		{
-			std::ofstream times_data ("times_data_samp_5238784.dat", std::ofstream::out | std::ofstream::trunc);
-			for ( size_t sample = 0; sample < series_stride; sample ++)
+			std::ofstream times_data ("16_bits_dedispersed_chunk.dat", std::ofstream::out | std::ofstream::trunc);
+			for ( size_t sample = 0; sample < (series_stride / 2); sample ++)
 				times_data << sample << " " << d_time_series[sample] << endl;
 
 			cout << "Printed timeseries data" << endl;
 
 			times_data.close();
 			std::cin.get();
-		} */
-
+		}
+*/
 
 /*    	switch( pl->params.dm_nbits )
 	{
@@ -423,7 +436,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
     	// ---------
     	start_timer(normalise_timer);
     	hd_float rms = rms_getter.exec(time_series, cur_nsamps);
-	
+
 	//cout << "RMS = " << rms << endl;
 
 	// devides the data by RMS
@@ -616,7 +629,8 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
         too_many_giants = true;
         float searched = ((float) dm_idx * 100) / (float) dm_count;
         cout << "WARNING: exceeded max giants/min, DM [" << dm_list[dm_idx] << "] space searched " << searched << "%" << endl;
-        break;
+        cout << "Will stop with processing this chunk " << endl;
+	break;
       }
 
     } // End of filter width loop

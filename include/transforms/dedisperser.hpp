@@ -112,12 +112,12 @@ public:
     size_t max_delay = dedisp_get_max_delay(plan);
     unsigned int out_nsamps = filterbank.get_nsamps()-max_delay;
     size_t output_size = out_nsamps * dm_list.size();
-    unsigned char* data_ptr = new unsigned char [output_size];
+    unsigned char* data_ptr = new unsigned char [output_size]; 	// * 2 to handle 16-bit output data
     dedisp_error error = dedisp_execute(plan,
 					filterbank.get_nsamps(),
 					filterbank.get_data(),
 					filterbank.get_nbits(),
-					data_ptr,8,(unsigned)0);
+					data_ptr,8,(unsigned)0);	// 8 is the number of output bits for dedispersed timeseries
     
     ErrorChecker::check_dedisp_error(error,"execute");
     DispersionTrials<unsigned char> ddata(data_ptr,out_nsamps,filterbank.get_tsamp(),dm_list);
