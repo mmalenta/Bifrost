@@ -508,7 +508,8 @@ int main(int argc, char* argv[])
   		if (args.npdmp > 0){
     			if (args.verbose)
       				std::cout << "Folding top "<< args.npdmp <<" cands" << std::endl;
-    			folder.fold_n(args.npdmp);
+    				// fold_n checks if npdmp is smaller than the number of candidates
+				folder.fold_n(args.npdmp);
   		}
   		timers["folding"].stop();
 
