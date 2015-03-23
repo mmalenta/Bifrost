@@ -250,34 +250,34 @@ public:
       PUSH_NVTX_RANGE("Acceleration-Loop",1)
 
       for (int jj=0;jj<acc_list.size();jj++){
-	    if (args.verbose)
-	      std::cout << "Resampling to "<< acc_list[jj] << " m/s/s" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Resampling to "<< acc_list[jj] << " m/s/s" << std::endl;
 	    resampler.resample(d_tim,d_tim_r,size,acc_list[jj]);
 
-	    if (args.verbose)
-	      std::cout << "Execute forward FFT" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Execute forward FFT" << std::endl;
 	    r2cfft.execute(d_tim_r.get_data(),d_fseries.get_data());
 
-	    if (args.verbose)
-	      std::cout << "Form interpolated power spectrum" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Form interpolated power spectrum" << std::endl;
 	    former.form_interpolated(d_fseries,pspec);
 
-	    if (args.verbose)
-	      std::cout << "Normalise power spectrum" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Normalise power spectrum" << std::endl;
 	    stats::normalise(pspec.get_data(),mean*size,std*size,size/2+1);
 
-	    if (args.verbose)
-	      std::cout << "Harmonic summing" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Harmonic summing" << std::endl;
 	    harm_folder.fold(pspec);
 
-	    if (args.verbose)
-	      std::cout << "Finding peaks" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Finding peaks" << std::endl;
 	    SpectrumCandidates trial_cands(tim.get_dm(),ii,acc_list[jj]);
 	    cand_finder.find_candidates(pspec,trial_cands);
 	    cand_finder.find_candidates(sums,trial_cands);
 
-	    if (args.verbose)
-	      std::cout << "Distilling harmonics" << std::endl;
+	    //if (args.verbose)
+	    //  std::cout << "Distilling harmonics" << std::endl;
 	      accel_trial_cands.append(harm_finder.distill(trial_cands.cands));
       }
 	  POP_NVTX_RANGE
