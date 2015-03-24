@@ -383,6 +383,8 @@ int main(int argc, char* argv[])
 
 	unsigned int disp_diff = 0;		// so I don't have to make the whole thing again
 
+	cudaSetDevice(args.gpu_ids[0]);
+
   	SigprocFilterbank filobj(filename, disp_diff);
   	timers["reading"].stop();
 
@@ -474,8 +476,10 @@ int main(int argc, char* argv[])
   		if (args.progress_bar)
     			dispenser.enable_progress_bar();
 
+		cout << "Nthreads: " << nthreads << endl;
+
   		for (int ii=0;ii<nthreads;ii++){
-    			workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,ii));
+    			workers[ii] = (new Worker(trials,dispenser,acc_plan,args,size,args.gpu_ids[ii]));
     			pthread_create(&threads[ii], NULL, launch_worker_thread, (void*) workers[ii]);
   		}
 
@@ -552,7 +556,7 @@ int main(int argc, char* argv[])
 	if( args.single_pulse_search || args.both_search )
 	{
 
-		cudaSetDevice(0);
+		cudaSetDevice(args.gpu_ids[0]);
 		cudaDeviceReset();
 		std::cout << "Single pulse searching starts here\n";
 
@@ -577,7 +581,7 @@ int main(int argc, char* argv[])
 		params.dm_pulse_width = args.dm_pulse_width;	// expected intrinsic pulse width
 		params.dm_nbits = 8;				// number of bits per dedispersed sample
 		params.use_scrunching = false;
-		params.gpu_id = 0; 				// need to work on this to enable multi-GPU support
+		params.gpu_id = args.gpu_ids[0]; 		// need to work on this to enable multi-GPU support
 		params.detect_thresh = 6.0;
 		params.f0 = filobj.get_fch1();
 		params.df = filobj.get_foff();
