@@ -803,7 +803,7 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 		if (!both_search)
 			mkdir(pl->params.output_dir.c_str(), 0777);
 
-		std::string filename = std::string(pl->params.output_dir) + std::string(buffer) + "_" + ss.str() + ".cand";
+		std::string filename = std::string(pl->params.output_dir) + "/" + std::string(buffer) + "_" + ss.str() + ".cand";
 
     		if( pl->params.verbosity >= 2 )
       		cout << "Output filename: " << filename << endl;
