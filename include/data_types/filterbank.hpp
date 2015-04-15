@@ -415,7 +415,7 @@ public:
 
 
     	std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
-    	std::cout << "The channel bandwidht [MHz]: " << hdr.foff << std::endl;
+    	std::cout << "The channel bandwidth [MHz]: " << hdr.foff << std::endl;
     	std::cout << "The number of channels: " << hdr.nchans << std::endl;
 
     //averaging the time samples
@@ -548,7 +548,6 @@ public:
 
         // "dedispersing" might slow the things down as we are processing much larger chunks
         thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans + total_more * nchans);
-        thrust::device_vector<bool> d_killmask_chunk(data_chunk * nchans + total_more * nchans);        // killmask for the entire time chunk
         thrust::device_vector<int> d_reduced_chunk_keys(data_chunk + total_more);
         thrust::device_vector<double> d_chunk_timesamples_double(data_chunk);
         thrust::device_vector<double> d_single_timesample(nchans);
@@ -587,25 +586,6 @@ public:
         double *full_chunk_mean = new double[chunks_no];
         double *full_chunk_var = new double[chunks_no];
         double *full_chunk_std = new double[chunks_no];
-	bool *killmask_array = new bool[nchans];
-
-	for (int ii = 0; ii < 25; ii++)
-                killmask_array[ii] = 1;
-
-        for (int ii = 25; ii < 1004; ii++)
-                killmask_array[ii] = 1;
-
-        for (int ii = 1004; ii < 1024; ii++)
-                killmask_array[ii] = 1;
-
-        thrust::device_ptr<bool> killmask_ptr = d_killmask_chunk.data();
-
-        for (int time_samp = 0; time_samp < total_samps; time_samp++)
-                thrust::copy_n(killmask_array, 1024, killmask_ptr + nchans * time_samp);
-
-        int unmasked_channel = thrust::count(d_killmask_chunk.begin(), d_killmask_chunk.end(), 1) / total_samps;
-
-        cout << unmasked_channel << " unmasked channels\n";
 
 	// device iterators for thrust::pair
         typedef thrust::device_vector<int>::iterator intIter;
@@ -621,7 +601,7 @@ public:
 		thrust::sequence(d_sequence_chunk.begin(), d_sequence_chunk.end(), (size_t)0, (size_t)diff_per_chan);
 
         	for (int time_samp = 0; time_samp < total_samps; time_samp++)
-               		thrust::copy_n(d_sequence_chunk.begin(), 1024, d_total_seq.begin() + time_samp * nchans);
+               		thrust::copy_n(d_sequence_chunk.begin(), nchans, d_total_seq.begin() + time_samp * nchans);
 	} else
 	{
 		thrust::fill(d_total_seq.begin(), d_total_seq.end(), (size_t)0);
@@ -651,13 +631,6 @@ public:
 				d_chunk_to_process.begin());
 
                 thrust::device_ptr<double> sample_ptr = d_chunk_to_process.data();
-
-                // multiply by killmask
-                thrust::transform(d_chunk_to_process.begin(),
-                                        d_chunk_to_process.end(),
-                                        d_killmask_chunk.begin(),
-                                        d_chunk_to_process.begin(),
-                                        thrust::multiplies<double>());
 
 		// "DEDISPERSION ALGORITHM"
 
@@ -891,7 +864,6 @@ public:
 	delete [] full_chunk_mean;
 	delete [] full_chunk_var;
 	delete [] full_chunk_std;
-	delete [] killmask_array;
 
 //	delete [] full_chunk_mean_smooth;
 //	delete [] full_chunk_var_smooth;
