@@ -418,29 +418,32 @@ public:
     	std::cout << "The channel bandwidth [MHz]: " << hdr.foff << std::endl;
     	std::cout << "The number of channels: " << hdr.nchans << std::endl;
 
-    //averaging the time samples
+    	//averaging the time samples
 
-    std::cout << "Averaging time samples\n";
+    	std::cout << "Averaging time samples\n";
 
-    double new_tsamp = (double)(hdr.tsamp * 2.0);
+    	double new_tsamp = (double)(hdr.tsamp * 2.0);
 
-    unsigned int new_nsamples = (hdr.nsamples / 2); // new number of time samples per channel
+    	unsigned int new_nsamples = (hdr.nsamples / 2); // new number of time samples per channel
 
-    size_t new_input_size = (size_t) new_nsamples * hdr.nbits * hdr.nchans / 8;
+    	size_t new_input_size = (size_t) new_nsamples * hdr.nbits * hdr.nchans / 8;
 
-    unsigned char *data_new = new unsigned char [new_input_size];
+    	unsigned char *data_new = new unsigned char [new_input_size];
 
-    unsigned int nchans = hdr.nchans;
-    unsigned int nsamples = hdr.nsamples;
+    	unsigned int nchans = hdr.nchans;
+    	unsigned int nsamples = hdr.nsamples;
 
-    size_t total_nsamples = (size_t) nchans * nsamples;
+    	size_t total_nsamples = (size_t) nchans * nsamples;
 
 	// move into array
-    unsigned int data_point_1, data_point_2, data_point_3, data_point_4, data_point_5, data_point_6, data_point_7, data_point_8;
+    	unsigned int data_point_1, data_point_2, data_point_3, data_point_4, data_point_5, data_point_6, data_point_7, data_point_8;
 
-    size_t saved = 0;
+    	size_t saved = 0;
 
-    for ( size_t current_sample_block = 0; current_sample_block < total_nsamples; current_sample_block+= size_t(nchans * 2))
+	// to avoid problem with unven number of time samples
+	size_t total_nsamples_even = (size_t)(nsamples / 2) * 2 * nchans;
+
+    for ( size_t current_sample_block = 0; current_sample_block < total_nsamples_even; current_sample_block+= size_t(nchans * 2))
     {
 
 	// the following code will only work if the number of channels can be divided by 8
