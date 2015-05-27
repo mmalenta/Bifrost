@@ -25,6 +25,7 @@ struct CmdLineOptions {
   float boundary_25_freq;
   float start_time;
   float read_time;
+  int gulp_size;
   int nharmonics;
   int npdmp;
   int limit;
@@ -163,8 +164,11 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
 	TCLAP::ValueArg<float> arg_read_time("", "read",
 						"Time to read for the single pulse processing (s)",
 						false, 0.0, "float", cmd);
+	TCLAP::ValueArg<int> arg_gulp_size("", "gulp",
+						"The number of time samples processed in one singple pulse search chunk",
+						false, 262144, "int", cmd);
 
-      TCLAP::MultiArg<int> arg_gpu_ids("i", "gpu_id", "GPU IDs to be used", false, "int", cmd); 	
+      TCLAP::MultiArg<int> arg_gpu_ids("i", "gpu_id", "GPU IDs to be used", false, "int", cmd);
 
       TCLAP::MultiSwitchArg arg_verbose("v", "verbose", "Verbose mode with different levels (up to 4)", cmd);
 
@@ -215,6 +219,7 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
       args.both_search       = arg_both_search.getValue();
       args.start_time		= arg_start_time.getValue();
       args.read_time		= arg_read_time.getValue();
+      args.gulp_size		= arg_gulp_size.getValue();
     }catch (TCLAP::ArgException &e) {
     std::cerr << "Error: " << e.error() << " for arg " << e.argId()
               << std::endl;

@@ -246,7 +246,7 @@ public:
 	    std::cout << "Executing inverse FFT" << std::endl;
       c2rfft.execute(d_fseries.get_data(),d_tim.get_data());
 
-      CandidateCollection accel_trial_cands;    
+      CandidateCollection accel_trial_cands;
       PUSH_NVTX_RANGE("Acceleration-Loop",1)
 
       for (int jj=0;jj<acc_list.size();jj++){
@@ -538,8 +538,15 @@ int main(int argc, char* argv[])
 		xml_filepath << args.outdir << "/" << "pulsar_search_overview.xml";
 		stats.to_file(xml_filepath.str());
 
-		std::cout << "Finished pulsar searching\n";
+		cout << "Finished pulsar searching\n";
 
+		#define POST_PROC 0
+
+		if(POST_PROC) {
+
+			cout << "Removing pulsar search lock" << endl;
+			rmdir("pulsar_lock");
+		}
 		//cudaDeviceReset();
 	}
 
@@ -583,6 +590,10 @@ int main(int argc, char* argv[])
 		//params.utc_start = filobj_get_utc_start();	// leave for now
 		params.spectra_per_second = (double) 1.0/(double)params.dt;
 		params.max_giant_rate = args.max_rate;
+
+		// round nsamps_gulp to a nearest higher power of 2
+		size_t power_two_gulp = 1 << (unsigned int)ceil(log2((double)args.gulp_size));
+		params.nsamps_gulp = power_two_gulp;
 
 		size_t nsamps_gulp = params.nsamps_gulp;
 		float start_time = args.start_time;
