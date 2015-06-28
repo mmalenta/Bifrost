@@ -248,7 +248,7 @@ public:
 	    std::cout << "Executing inverse FFT" << std::endl;
       c2rfft.execute(d_fseries.get_data(),d_tim.get_data());
 
-      CandidateCollection accel_trial_cands;    
+      CandidateCollection accel_trial_cands;
       PUSH_NVTX_RANGE("Acceleration-Loop",1)
 
       for (int jj=0;jj<acc_list.size();jj++){
@@ -439,12 +439,6 @@ int main(int argc, char* argv[])
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
-	//perform_tests(timeseries_data_ptr, output_samps, dm_size);
-
-	//cout << "Performed tests\n";
-	
-//	cin.get();
-
   	timers["dedispersion"].stop();
 
   	if (args.progress_bar)
@@ -546,15 +540,15 @@ int main(int argc, char* argv[])
 		xml_filepath << args.outdir << "/" << "pulsar_search_overview.xml";
 		stats.to_file(xml_filepath.str());
 
-		std::cout << "Finished pulsar searching\n";
+		cout << "Finished pulsar searching\n";
+
+		#define POST_PROC 0
 
                 if(POST_PROC) {
 
                         cout << "Removing pulsar search lock" << endl;
                         rmdir("pulsar_lock");
                 }
-
-
 
 	}
 
@@ -584,6 +578,7 @@ int main(int argc, char* argv[])
 		std::cout << "Single pulse searching starts here\n";
 
 		std::cout << "Heimdall, open the Bifrost!!\n";
+
 		// because Bifrost opening Heimdall sounds wrong
 
 		// create Heimdall pipeline object - use results from pre-peasoup dedispersion
@@ -592,11 +587,9 @@ int main(int argc, char* argv[])
 		hd_params params;
 		hd_set_default_params(&params);
 
-		// copy command line options from args to params - due this ugly way now, put in the function later
-
 		params.utc_start = filobj.get_utc_start();
 		params.output_dir = args.outdir;
-		params.verbosity = 3; // set the maximum verbosity level, so we can have as much information as possible
+		params.verbosity = 3; // set the maximum verbosity level, for testing purposes
 		params.sigproc_file = args.infilename;
 		params.dm_min = args.dm_start;
 		params.dm_max = args.dm_end;
@@ -612,8 +605,38 @@ int main(int argc, char* argv[])
 		params.nchans = filobj.get_nchans();
 		//params.utc_start = filobj_get_utc_start();	// leave for now
 		params.spectra_per_second = (double) 1.0/(double)params.dt;
+		params.max_giant_rate = args.max_rate;
+
+		// round nsamps_gulp to a nearest higher power of 2
+		size_t power_two_gulp = 1 << (unsigned int)ceil(log2((double)args.gulp_size));
+		params.nsamps_gulp = power_two_gulp;
 
 		size_t nsamps_gulp = params.nsamps_gulp;
+		float start_time = args.start_time;
+		float read_time = args.read_time;
+
+		// just in case someone puts negative time
+		size_t start_time_samp = min((unsigned long long)0, (unsigned long long)ceil(start_time / params.dt));
+		size_t read_time_samp = (size_t)ceil(read_time / params.dt);
+
+		cout << start_time_samp << endl;
+
+		// default behaviour - read everything
+		if (read_time_samp == 0)
+			read_time_samp = output_samps;
+
+		cout << read_time_samp << endl;
+
+		// make sure we process at least one full gulp
+		// need to adjust start time
+		read_time_samp = max((unsigned long long)nsamps_gulp, (unsigned long long)read_time_samp);
+		start_time_samp = min((long long)start_time_samp, (long long)output_samps - (long long)nsamps_gulp);
+
+		cout << "Will process " << read_time_samp << " starting at sample " << start_time_samp << endl;
+
+		// check that we are not trying to read beyond what is available
+		size_t end_time_samp = (size_t)min((unsigned long long)output_samps, (unsigned long long)start_time_samp + read_time_samp);
+
 		size_t nbits = filobj.get_nbits();
 		size_t stride = (params.nchans * nbits) / (8 * sizeof(char));
 
@@ -621,6 +644,8 @@ int main(int argc, char* argv[])
 
 		hd_pipeline pipeline;
 		hd_error error;
+
+		cout << "Will process " << read_time_samp << " samples, starting at sample " << start_time_samp << endl;
 
 //		dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
@@ -639,13 +664,17 @@ int main(int argc, char* argv[])
 		std::cout << "Pipeline created successfully!!" << std::endl;
 		// hd_byte is unsigned char
 
+		// used to store the total number of samples processed so far
 		size_t total_nsamps = 0;
+
+		// move the starting point
+		total_nsamps = start_time_samp;
 
   		size_t overlap = 0;
 		bool stop_requested = false;
 
-		// will stop execution when the number of samples is larger 
-		// or equal to output_samps - currently original_samples
+		// will stop execution when the number of samples is larger
+		// or equal to output_samps
 
 		size_t nsamps_read = nsamps_gulp;
 
@@ -691,7 +720,7 @@ int main(int argc, char* argv[])
 
     			overlap += nsamps_read - nsamps_processed;
 
-			if (total_nsamps + nsamps_processed > original_samples )
+			if (total_nsamps + nsamps_processed > end_time_samp)
       				stop_requested = 1;
 
   		}

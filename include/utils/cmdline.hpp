@@ -23,11 +23,15 @@ struct CmdLineOptions {
   float acc_pulse_width;
   float boundary_5_freq;
   float boundary_25_freq;
+  float start_time;
+  float read_time;
+  int gulp_size;
   int nharmonics;
   int npdmp;
   int limit;
   float min_snr;
   float min_freq;
+  int max_rate;
   float max_freq;
   int max_harm;
   float freq_tol;
@@ -52,7 +56,7 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
 {
   try
     {
-      TCLAP::CmdLine cmd("Peasoup - a GPU pulsar search pipeline", ' ', "1.0");
+      TCLAP::CmdLine cmd("Bifrost pipeline for pulsar and single pulse processing", ' ', "1.0");
 
       TCLAP::ValueArg<std::string> arg_infilename("f", "inputfile",
 						  "File to process (.fil)",
@@ -142,6 +146,10 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
                                           "Highest Fourier freqency to consider",
                                           false, 1100.0, "float",cmd);
 
+	TCLAP::ValueArg<int> arg_max_rate("", "max_rate",
+						"Maximum number of single pulse candidates per minute",
+						false, 250000, "int", cmd);
+
       TCLAP::ValueArg<int> arg_max_harm("", "max_harm_match",
                                         "Maximum harmonic for related candidates",
                                         false, 16, "float",cmd);
@@ -149,8 +157,18 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
       TCLAP::ValueArg<float> arg_freq_tol("", "freq_tol",
                                           "Tolerance for distilling frequencies (0.0001 = 0.01%)",
                                           false, 0.0001, "float",cmd);
-      
-      TCLAP::MultiArg<int> arg_gpu_ids("i", "gpu_id", "GPU IDs to be used", false, "int", cmd); 	
+
+	TCLAP::ValueArg<float> arg_start_time("", "start",
+						"Time from the start of the observation to skip for the single pulse processing (s)",
+						false, 0.0, "float", cmd);
+	TCLAP::ValueArg<float> arg_read_time("", "read",
+						"Time to read for the single pulse processing (s)",
+						false, 0.0, "float", cmd);
+	TCLAP::ValueArg<int> arg_gulp_size("", "gulp",
+						"The number of time samples processed in one singple pulse search chunk",
+						false, 262144, "int", cmd);
+
+      TCLAP::MultiArg<int> arg_gpu_ids("i", "gpu_id", "GPU IDs to be used", false, "int", cmd);
 
       TCLAP::MultiSwitchArg arg_verbose("v", "verbose", "Verbose mode with different levels (up to 4)", cmd);
 
@@ -191,13 +209,17 @@ bool read_cmdline_options(CmdLineOptions& args, int argc, char **argv)
       args.min_freq          = arg_min_freq.getValue();
       args.max_freq          = arg_max_freq.getValue();
       args.max_harm          = arg_max_harm.getValue();
+      args.max_rate		= arg_max_rate.getValue();
       args.freq_tol          = arg_freq_tol.getValue();
       args.verbose           = arg_verbose.getValue();
-      args.scrunch	     = arg_scrunch.getValue();      
+      args.scrunch	     = arg_scrunch.getValue();
       args.progress_bar      = arg_progress_bar.getValue();
       args.pulsar_search     = arg_pulsar_search.getValue();
       args.single_pulse_search = arg_single_pulse_search.getValue();
       args.both_search       = arg_both_search.getValue();
+      args.start_time		= arg_start_time.getValue();
+      args.read_time		= arg_read_time.getValue();
+      args.gulp_size		= arg_gulp_size.getValue();
     }catch (TCLAP::ArgException &e) {
     std::cerr << "Error: " << e.error() << " for arg " << e.argId()
               << std::endl;
