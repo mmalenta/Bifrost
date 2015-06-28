@@ -42,6 +42,8 @@ using std::cout;
 using std::endl;
 using std::cerr;
 
+#define POST_PROC 1
+
 struct dedisp_plan_struct {
   // Multi-GPU parameters
   dedisp_size  device_count;
@@ -546,15 +548,36 @@ int main(int argc, char* argv[])
 
 		std::cout << "Finished pulsar searching\n";
 
-		//cudaDeviceReset();
+                if(POST_PROC) {
+
+                        cout << "Removing pulsar search lock" << endl;
+                        rmdir("pulsar_lock");
+                }
+
+
+
 	}
 
 	timers["pulsar"].stop();
 
 	timers["single_pulse"].start();
 
+	for(int ii = 0; ii < nthreads; ii++)
+		cout << args.gpu_ids[ii];
+
+
+	for(int ii = 1; ii < nthreads; ii++) {
+		cout << ii << endl;
+		cudaSetDevice(args.gpu_ids[ii]);
+		cout << ii << endl;
+		cudaDeviceReset();
+		cout << ii << endl;
+	}
+
 	if( args.single_pulse_search || args.both_search )
 	{
+
+		cout << "Made it here" << endl;
 
 		cudaSetDevice(args.gpu_ids[0]);
 		cudaDeviceReset();
@@ -691,6 +714,12 @@ int main(int argc, char* argv[])
 	    		cout << "All done." << endl;
   		}
 
+                if(POST_PROC) {
+
+                        cout << "Removing single pulse search lock" << endl;
+                        rmdir("single_lock");
+                }
+
 
 	} // end of the single pulse search if-statement
 
@@ -712,21 +741,3 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

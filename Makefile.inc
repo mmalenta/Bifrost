@@ -7,7 +7,7 @@ CUDA_DIR   = /usr/local/cuda-6.5
 THRUST_DIR = /usr/local/cuda-6.5/include/thrust
 
 #dedisp setup
-DEDISP_DIR = /home/mmalenta/code/dedisp_bifrost
+DEDISP_DIR = /home/malenta/code/dedisp_bifrost
 
 GCC       = gcc
 GXX       = g++

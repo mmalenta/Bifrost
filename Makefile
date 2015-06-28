@@ -17,12 +17,12 @@ OPTIMISE = -O3
 DEBUG    =
 
 # Includes and libraries
-INCLUDE  = -I$(INCLUDE_DIR) -I$(THRUST_DIR) -I${DEDISP_DIR}/include -I${CUDA_DIR}/include -I./tclap
+INCLUDE  = -I$(INCLUDE_DIR) -I$(THRUST_DIR) -I${DEDISP_DIR}/include -I${CUDA_DIR}/include -I./tclap -I/home/malenta/code/boost_1_57_0/
 LIBS = -L$(CUDA_DIR)/lib64 -lcudart -L${DEDISP_DIR}/lib -ldedisp -lcufft -lpthread -lnvToolsExt
 
 # compiler flags
 # --compiler-options -Wall
-NVCC_COMP_FLAGS = -gencode=arch=compute_20,code=sm_20 -gencode=arch=compute_30,code=sm_30 -gencode=arch=compute_35,code=sm_35
+NVCC_COMP_FLAGS = -gencode=arch=compute_52,code=sm_52#-gencode=arch=compute_20,code=sm_20 -gencode=arch=compute_30,code=sm_30 -gencode=arch=compute_35,code=sm_35
 NVCCFLAGS  = ${UCFLAGS} ${OPTIMISE} ${NVCC_COMP_FLAGS} --machine 64 -Xcompiler ${DEBUG}
 CFLAGS    = ${UCFLAGS} -fPIC ${OPTIMISE} ${DEBUG}
 
@@ -30,15 +30,13 @@ SRC_FILES = ${SRC_DIR}/bifrost.cu ${SRC_DIR}/pipeline_heimdall.cu ${SRC_DIR}/err
 		${SRC_DIR}/measure_bandpass.cu ${SRC_DIR}/remove_baseline.cu \
 		${SRC_DIR}/get_rms.cu ${SRC_DIR}/median_filter.cu ${SRC_DIR}/matched_filter.cu \
 		${SRC_DIR}/find_giants.cu ${SRC_DIR}/client_socket.cpp ${SRC_DIR}/socket.cpp \
-		${SRC_DIR}/label_candidate_clusters.cu ${SRC_DIR}/merge_candidates.cu \
-		${SRC_DIR}/mean_variance.cu
+		${SRC_DIR}/label_candidate_clusters.cu ${SRC_DIR}/merge_candidates.cu
 
 OBJECTS   = ${OBJ_DIR}/kernels.o ${OBJ_DIR}/pipeline_heimdall.o ${OBJ_DIR}/error.o \
                 ${OBJ_DIR}/measure_bandpass.o ${OBJ_DIR}/remove_baseline.o \
                 ${OBJ_DIR}/get_rms.o ${OBJ_DIR}/median_filter.o ${OBJ_DIR}/matched_filter.o \
                 ${OBJ_DIR}/find_giants.o ${OBJ_DIR}/client_socket.o ${OBJ_DIR}/socket.o \
-                ${OBJ_DIR}/label_candidate_clusters.o ${OBJ_DIR}/merge_candidates.o \
-		${OBJ_DIR}/mean_variance.o
+                ${OBJ_DIR}/label_candidate_clusters.o ${OBJ_DIR}/merge_candidates.o
 EXE_FILES = ${BIN_DIR}/bifrost #${BIN_DIR}/resampling_test ${BIN_DIR}/harmonic_sum_test
 
 all: bifrost
