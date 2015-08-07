@@ -488,11 +488,11 @@ int main(int argc, char* argv[])
   		}
   		timers["searching"].stop();
 
-  		if (args.verbose)
-    			std::cout << "Distilling DMs" << std::endl;
+    		cout << "Distilling DMs" << endl;
   		dm_cands.cands = dm_still.distill(dm_cands.cands);
   		dm_cands.cands = harm_still.distill(dm_cands.cands);
 
+		cout << "Running candidate scorer" << endl;
   		CandidateScorer cand_scorer(filobj.get_tsamp(),filobj.get_cfreq(), filobj.get_foff(),
 			      	fabs(filobj.get_foff())*filobj.get_nchans());
  	 	cand_scorer.score_all(dm_cands.cands);
@@ -541,8 +541,6 @@ int main(int argc, char* argv[])
 		stats.to_file(xml_filepath.str());
 
 		cout << "Finished pulsar searching\n";
-
-		#define POST_PROC 0
 
                 if(POST_PROC) {
 
