@@ -36,6 +36,7 @@
 #include "pthread.h"
 #include <cmath>
 #include <map>
+#include <sstream>
 
 using std::cin;
 using std::cout;
@@ -439,9 +440,34 @@ int main(int argc, char* argv[])
 
 	size_t output_size = output_samps * dm_size;
 
-	//unsigned char *timeseries_data_ptr = new unsigned char [output_size];
-
 	unsigned char *timeseries_data_ptr = trials.get_data();
+
+
+	// print out first and last 262144 time samples
+	// will amount to total of around 64 seconds of GHRSS data
+	// REMEMBER - data is DM-major
+
+	std::string file_out;
+	std::ostringstream oss;
+
+	for (size_t dm_try = 0; dm_try < dm_size; dm_try++) {
+
+
+		oss << dm_try;
+
+		size_t dm_start = dm_try * output_samps;
+		file_out = "DM" + oss.str() + ".dat"; 
+
+		std::ofstream to_save(file_out.c_str());
+
+		for (size_t sample = 0; sample < 262144; sample++)
+			to_save << timeseries_data_ptr[dm_start + sample] << endl;
+
+		for (size_t sample = output_samps - 262144; sample < output_samps; sample++)
+			to_save << timeseries_data_ptr[dm_start + sample] << endl;
+
+		to_save.close();
+	}
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
