@@ -316,6 +316,12 @@ int main(int argc, char* argv[])
 	timers["single_pulse"] 	= Stopwatch();
   	timers["total"].start();
 
+	cout << "##########################################" << endl;
+	cout << "THIS IS A DEVELOPMENT VERSION!!" << endl;
+	cout << "DO NOT USE AS A PART OF REGULAR PIPELINE!!" << endl;
+	cout << "##########################################" << endl << endl;
+
+
 	CmdLineOptions args;
 	if (!read_cmdline_options(args,argc,argv))
     		ErrorChecker::throw_error("Failed to parse command line arguments.");

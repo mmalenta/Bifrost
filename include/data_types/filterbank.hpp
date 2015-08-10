@@ -702,7 +702,7 @@ public:
                 full_chunk_var[chunk_no] = thrust::reduce(d_chunk_timesamples_diff_sqr.begin(),
                                                                 d_chunk_timesamples_diff_sqr.end(),
                                                                 0.0,
-                                                                binary_op) / (double)data_chunk;
+                                                                binary_op) / ((double)data_chunk - 1.0);
 
                 full_chunk_std[chunk_no] = sqrt(full_chunk_var[chunk_no]);
 
