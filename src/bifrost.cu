@@ -452,6 +452,7 @@ int main(int argc, char* argv[])
 
 	for (size_t dm_try = 0; dm_try < dm_size; dm_try++) {
 
+		oss.str("");
 
 		oss << dm_try;
 
@@ -573,8 +574,6 @@ int main(int argc, char* argv[])
 		stats.to_file(xml_filepath.str());
 
 		cout << "Finished pulsar searching\n";
-
-		#define POST_PROC 0
 
                 if(POST_PROC) {
 
