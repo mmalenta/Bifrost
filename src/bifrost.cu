@@ -462,10 +462,10 @@ int main(int argc, char* argv[])
 		std::ofstream to_save(file_out.c_str());
 
 		for (size_t sample = 0; sample < 262144; sample++)
-			to_save << timeseries_data_ptr[dm_start + sample] << endl;
+			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
 
 		for (size_t sample = output_samps - 262144; sample < output_samps; sample++)
-			to_save << timeseries_data_ptr[dm_start + sample] << endl;
+			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
 
 		to_save.close();
 	}
