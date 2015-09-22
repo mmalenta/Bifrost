@@ -339,7 +339,7 @@ public:
 
     \param filename Path to a valid sigproc filterbank file.
   */
-  SigprocFilterbank(std::string filename, unsigned int disp_diff=0)
+  SigprocFilterbank(std::string filename, unsigned int disp_diff=0, bool smooth = false)
   {
     std::ifstream infile;
     SigprocHeader hdr;
@@ -561,28 +561,6 @@ public:
         thrust::device_vector<size_t> d_timesample_index(data_chunk * nchans + total_more * nchans);
         thrust::device_vector<double> d_chunk_mean(data_chunk);
 
-
-/*        thrust::device_vector<double> d_chunk_to_process(data_chunk * nchans);
-        thrust::device_vector<double> d_chunk_keys_array(data_chunk * nchans);
-        thrust::device_vector<double> d_reduced_chunk_keys_array(nchans);
-        thrust::device_vector<double> d_chunk_sum_array(nchans);
-        thrust::device_vector<double> d_chunk_mean_array(nchans);
-        thrust::device_vector<double> d_chunk_mean_expand_array(data_chunk * nchans);
-        thrust::device_vector<double> d_chunk_diff_array(data_chunk * nchans);
-        thrust::device_vector<double> d_chunk_diff_sqr_array(data_chunk * nchans);
-        thrust::device_vector<double> d_chunk_var_array(nchans);
-
-        thrust::device_vector<double> d_full_chunk_mean(512);
-        thrust::device_vector<double> d_full_chunk_var(512);
-*/
-/*      int *reduced_chunk_keys_array = new int[nchans];
-        double *chunk_sum_array = new double[nchans];
-        double *chunk_mean_array = new double[nchans];
-        double *chunk_mean_expand_array = new double[data_chunk * nchans];
-        double *chunk_diff_array = new double[data_chunk * nchans];
-        double *chunk_diff_sqr_array = new double[data_chunk * nchans];
-        double *chunk_var_array = new double[nchans];
-*/
         thrust::constant_iterator<double> rec_chunk_start(1.0/(double)data_chunk);
         thrust::constant_iterator<double> rec_chunk_end = rec_chunk_start + nchans;
 
@@ -742,127 +720,105 @@ public:
 	// FINISHED MEAN AND STANDARD DEVIATION PART
 	// SMOOTHING PART START HERE
 
-        cout << "Smoothing the data\n";
+	if(smooth) {
 
-        // REMEMBER -- WEIGHTS MUST ADD UP TO 1!!!
-        double *smoothing_function = new double[32];
+		cout << "Smoothing the data\n";
 
-        thrust::device_vector<double> d_smoothing_function(32);
-        thrust::device_vector<double> d_mean(chunks_no);
-        thrust::device_vector<double> d_variance(chunks_no);
-        thrust::device_vector<double> d_stdev(chunks_no);
-        thrust::device_vector<double> d_mean_smoothed_part(32);
-        thrust::device_vector<double> d_stdev_smoothed_part(32);
+		// REMEMBER -- WEIGHTS MUST ADD UP TO 1!!!
+		double *smoothing_function = new double[32];
 
-        std::ifstream func_in("smoothing_function.dat");
+		thrust::device_vector<double> d_smoothing_function(32);
+		thrust::device_vector<double> d_mean(chunks_no);
+		thrust::device_vector<double> d_variance(chunks_no);
+		thrust::device_vector<double> d_stdev(chunks_no);
+		thrust::device_vector<double> d_mean_smoothed_part(32);
+		thrust::device_vector<double> d_stdev_smoothed_part(32);
 
-        if (!func_in.is_open())
-        {
-                cout << "Could not open the file, will use simple weighted mean as smoothing\n";
-                for (int i = 0; i < 32; i++)
-			smoothing_function[i] = (double)1.0/(double)32.0;
-        } else
-	{
-                for(int i = 0; i < 32; i++)
-                        func_in >> smoothing_function[i];
-        }
+		std::ifstream func_in("smoothing_function.dat");
 
-	func_in.close();
+		if (!func_in.is_open())
+		{
+        		cout << "Could not open the file, will use simple weighted mean as smoothing\n";
+        		for (int i = 0; i < 32; i++)
+				smoothing_function[i] = (double)1.0/(double)32.0;
+		} else
+		{
+        		for(int i = 0; i < 32; i++)
+                		func_in >> smoothing_function[i];
+		}
 
-	thrust::copy(smoothing_function, smoothing_function + 32, d_smoothing_function.begin());
+		func_in.close();
 
-        //this is a very simple smoothing function -- box with weight of 1/16
-        //thrust::fill(d_smoothing_function.begin(),
-        //              d_smoothing_function.end(),
-        //              (double)1.0/(double)32.0);
+		thrust::copy(smoothing_function, smoothing_function + 32, d_smoothing_function.begin());
+		thrust::copy(full_chunk_mean, full_chunk_mean + chunks_no, d_mean.begin());
+		thrust::copy(full_chunk_var, full_chunk_var + chunks_no, d_variance.begin());
+		thrust::copy(full_chunk_std, full_chunk_std + chunks_no, d_stdev.begin());
 
-        thrust::copy(full_chunk_mean, full_chunk_mean + chunks_no, d_mean.begin());
-        thrust::copy(full_chunk_var, full_chunk_var + chunks_no, d_variance.begin());
-        thrust::copy(full_chunk_std, full_chunk_std + chunks_no, d_stdev.begin());
+		double *full_chunk_mean_smooth = new double[chunks_no];
+		double *full_chunk_var_smooth = new double[chunks_no];
+		double *full_chunk_std_smooth = new double[chunks_no];
 
-        double *full_chunk_mean_smooth = new double[chunks_no];
-        double *full_chunk_var_smooth = new double[chunks_no];
-        double *full_chunk_std_smooth = new double[chunks_no];
+		thrust::device_ptr<double> mean_ptr = d_mean.data();
+		thrust::device_ptr<double> stdev_ptr = d_stdev.data();
 
-        thrust::device_ptr<double> mean_ptr = d_mean.data();
-        thrust::device_ptr<double> stdev_ptr = d_stdev.data();
+		thrust::plus<double> sum_op;
 
-        thrust::plus<double> sum_op;
+		for (int smooth_start = 0; smooth_start < 16; smooth_start++)
+		{
+        		full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr,
+                                                		mean_ptr + smooth_start +16,
+                                                		0.0, sum_op) / (double)((double)smooth_start + 16.0);
+        		full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr,
+                                                		stdev_ptr + smooth_start + 16,
+                                                		0.0, sum_op) / (double)((double)smooth_start + 16.0);
+		}
 
-        for (int smooth_start = 0; smooth_start < 16; smooth_start++)
-        {
-                full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr,
-                                                        mean_ptr + smooth_start +16,
-                                                        0.0, sum_op) / (double)((double)smooth_start + 16.0);
-                full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr,
-                                                        stdev_ptr + smooth_start + 16,
-                                                        0.0, sum_op) / (double)((double)smooth_start + 16.0);
-        }
+		for (int smooth_start = chunks_no - 16; smooth_start < chunks_no; smooth_start++)
+		{
+        		full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr + smooth_start - 16,
+                                                		mean_ptr + chunks_no,
+                                                		0.0, sum_op) / (double)(chunks_no - (double)smooth_start + 16.0);
+        		full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr + smooth_start - 16,
+                                                		stdev_ptr + chunks_no,
+                                                		0.0, sum_op) / (double)(chunks_no - (double)smooth_start + 16.0);
+		}
 
-        for (int smooth_start = chunks_no - 16; smooth_start < chunks_no; smooth_start++)
-        {
-                full_chunk_mean_smooth[smooth_start] = thrust::reduce(mean_ptr + smooth_start - 16,
-                                                        mean_ptr + chunks_no,
-                                                        0.0, sum_op) / (double)(chunks_no - (double)smooth_start + 16.0);
-                full_chunk_std_smooth[smooth_start] = thrust::reduce(stdev_ptr + smooth_start - 16,
-                                                        stdev_ptr + chunks_no,
-                                                        0.0, sum_op) / (double)(chunks_no - (double)smooth_start + 16.0);
-        }
+		for (int smooth_start = 16; smooth_start < chunks_no - 16; smooth_start++)
+		{
+        		thrust::transform(mean_ptr + smooth_start - 16,
+                                		mean_ptr + smooth_start + 16,
+                                		d_smoothing_function.begin(),
+                                		d_mean_smoothed_part.begin(), thrust::multiplies<double>());
 
-	for (int smooth_start = 16; smooth_start < chunks_no - 16; smooth_start++)
-        {
-                thrust::transform(mean_ptr + smooth_start - 16,
-                                        mean_ptr + smooth_start + 16,
-                                        d_smoothing_function.begin(),
-                                        d_mean_smoothed_part.begin(), thrust::multiplies<double>());
+        		thrust::transform(stdev_ptr + smooth_start - 16,
+                                		stdev_ptr + smooth_start + 16,
+                                		d_smoothing_function.begin(),
+                                		d_stdev_smoothed_part.begin(), thrust::multiplies<double>());
+        		full_chunk_mean_smooth[smooth_start] = thrust::reduce(d_mean_smoothed_part.begin(),
+                                                        		d_mean_smoothed_part.end(),
+                                                        		0.0, sum_op);
 
-                thrust::transform(stdev_ptr + smooth_start - 16,
-                                        stdev_ptr + smooth_start + 16,
-                                        d_smoothing_function.begin(),
-                                        d_stdev_smoothed_part.begin(), thrust::multiplies<double>());
-                full_chunk_mean_smooth[smooth_start] = thrust::reduce(d_mean_smoothed_part.begin(),
-                                                                d_mean_smoothed_part.end(),
-                                                                0.0, sum_op);
+        		full_chunk_std_smooth[smooth_start] = thrust::reduce(d_stdev_smoothed_part.begin(),
+                                                        		d_stdev_smoothed_part.end(),
+                                                        		0.0, sum_op);
+		}
 
-                full_chunk_std_smooth[smooth_start] = thrust::reduce(d_stdev_smoothed_part.begin(),
-                                                                d_stdev_smoothed_part.end(),
-                                                                0.0, sum_op);
+			std::ofstream smooth_out("means_values_smooth_full.dat",
+                                		std::ofstream::out | std::ofstream::trunc);
+
+		for (int chunk_idx = 0; chunk_idx < chunks_no; chunk_idx++)
+        		smooth_out << chunk_idx << " " << full_chunk_mean_smooth[chunk_idx]
+                		<< " " << full_chunk_std_smooth[chunk_idx] << endl;
+
+		this->mean_array = full_chunk_mean_smooth;
+		this->stdev_array = full_chunk_std_smooth;
+
+	} else {
+
+		this->mean_array = full_chunk_mean;
+		this->stdev_array = full_chunk_std;
+
 	}
-
-	        std::ofstream smooth_out("means_values_smooth_full.dat",
-                                        std::ofstream::out | std::ofstream::trunc);
-
-        for (int chunk_idx = 0; chunk_idx < chunks_no; chunk_idx++)
-                smooth_out << chunk_idx << " " << full_chunk_mean_smooth[chunk_idx]
-                        << " " << full_chunk_std_smooth[chunk_idx] << endl;
-/*
-        delete [] chunk_to_process;
-        delete [] chunk_keys_array;
-        delete [] reduced_chunk_keys_array;
-        delete [] chunk_sum_array;
-        delete [] chunk_mean_array;
-        delete [] full_chunk_mean;
-        delete [] chunk_mean_expand_array;
-        delete [] chunk_diff_array;
-        delete [] chunk_diff_sqr_array;
-        delete [] chunk_var_array;
-*/
-
-//	for (int chunk_no = 0; chunk_no < 512; chunk_no++)
-//		full_chunk_mean_smooth[chunk_no] = full_chunk_mean_smooth[chunk_no] * (double)1024.0 +
-//							front_end_mean_diff[chunk_no] * (double)1024.0;
-
-//	cout << fil_total_mean << " " << full_chunk_mean_smooth[0];
-
-//	cin.get();
-
-	this->mean_array = full_chunk_mean_smooth;
-	this->stdev_array = full_chunk_std_smooth;
-
-
-	// turn smoothing off
-//	this->mean_array = full_chunk_mean;
-//	this->stdev_array = full_chunk_std;
 
 	delete [] full_chunk_mean;
 	delete [] full_chunk_var;

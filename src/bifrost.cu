@@ -390,11 +390,12 @@ int main(int argc, char* argv[])
 
   	timers["reading"].start();
 
-	unsigned int disp_diff = 0;		// so I don't have to make the whole thing again
+	unsigned int disp_diff = 10;		// so I don't have to make the whole thing again
+	bool smooth = true;			// mean and stdev smoothing on/off
 
 	cudaSetDevice(args.gpu_ids[0]);
 
-  	SigprocFilterbank filobj(filename, disp_diff);
+  	SigprocFilterbank filobj(filename, disp_diff, smooth);
   	timers["reading"].stop();
 
   	if (args.progress_bar)
@@ -447,6 +448,8 @@ int main(int argc, char* argv[])
 	// will amount to total of around 64 seconds of GHRSS data
 	// REMEMBER - data is DM-major
 
+	/*
+
 	std::string file_out;
 	std::ostringstream oss;
 
@@ -469,6 +472,8 @@ int main(int argc, char* argv[])
 
 		to_save.close();
 	}
+
+	*/
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
