@@ -36,6 +36,7 @@
 #include "pthread.h"
 #include <cmath>
 #include <map>
+#include <sstream>
 
 using std::cin;
 using std::cout;
@@ -316,6 +317,12 @@ int main(int argc, char* argv[])
 	timers["single_pulse"] 	= Stopwatch();
   	timers["total"].start();
 
+	cout << "##########################################" << endl;
+	cout << "THIS IS A DEVELOPMENT VERSION!!" << endl;
+	cout << "DO NOT USE AS A PART OF REGULAR PIPELINE!!" << endl;
+	cout << "##########################################" << endl << endl;
+
+
 	CmdLineOptions args;
 	if (!read_cmdline_options(args,argc,argv))
     		ErrorChecker::throw_error("Failed to parse command line arguments.");
@@ -383,11 +390,12 @@ int main(int argc, char* argv[])
 
   	timers["reading"].start();
 
-	unsigned int disp_diff = 0;		// so I don't have to make the whole thing again
+	unsigned int disp_diff = 10;		// so I don't have to make the whole thing again
+	bool smooth = true;			// mean and stdev smoothing on/off
 
 	cudaSetDevice(args.gpu_ids[0]);
 
-  	SigprocFilterbank filobj(filename, disp_diff);
+  	SigprocFilterbank filobj(filename, disp_diff, smooth);
   	timers["reading"].stop();
 
   	if (args.progress_bar)
@@ -433,9 +441,39 @@ int main(int argc, char* argv[])
 
 	size_t output_size = output_samps * dm_size;
 
-	//unsigned char *timeseries_data_ptr = new unsigned char [output_size];
-
 	unsigned char *timeseries_data_ptr = trials.get_data();
+
+
+	// print out first and last 262144 time samples
+	// will amount to total of around 64 seconds of GHRSS data
+	// REMEMBER - data is DM-major
+
+	/*
+
+	std::string file_out;
+	std::ostringstream oss;
+
+	for (size_t dm_try = 0; dm_try < dm_size; dm_try++) {
+
+		oss.str("");
+
+		oss << dm_try;
+
+		size_t dm_start = dm_try * output_samps;
+		file_out = "DM" + oss.str() + ".dat"; 
+
+		std::ofstream to_save(file_out.c_str());
+
+		for (size_t sample = 0; sample < 262144; sample++)
+			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
+
+		for (size_t sample = output_samps - 262144; sample < output_samps; sample++)
+			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
+
+		to_save.close();
+	}
+
+	*/
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
