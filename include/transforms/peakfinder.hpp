@@ -56,9 +56,9 @@ private:
   }
 
 public:
-  PeakFinder(float threshold, float min_freq, float max_freq, unsigned int size, int min_gap=30)
+  PeakFinder(float threshold, float min_freq, float max_freq, unsigned int size, int min_gap=20)
     :threshold(threshold), min_freq(min_freq), 
-     max_freq(max_freq),min_gap(min_gap),max_cands(100000)
+     max_freq(max_freq),min_gap(min_gap),max_cands(400000)
   {
     idxs.resize(max_cands);
     snrs.resize(max_cands);

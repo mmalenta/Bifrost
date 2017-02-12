@@ -14,7 +14,7 @@ INCLUDE_DIR = ./include
 
 # Compiler flags
 OPTIMISE = -O3
-DEBUG    =
+DEBUG    = #-g -G
 
 # Includes and libraries
 INCLUDE  = -I$(INCLUDE_DIR) -I$(THRUST_DIR) -I${DEDISP_DIR}/include -I${CUDA_DIR}/include -I./tclap -I/home/malenta/code/boost_1_57_0/

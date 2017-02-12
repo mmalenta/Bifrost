@@ -43,7 +43,7 @@ void hd_set_default_params(hd_params* params)
         // Note: These have very little effect on the candidates, but could be important
         //         to capture (*rare*) coincident events.
         params->cand_sep_filter = 3;  // Note: filter numbers, not actual width
-        params->cand_sep_dm     = 1; // Note: trials, not actual DM (original was 200)
+        params->cand_sep_dm     = 200; // Note: trials, not actual DM (original was 200)
         params->cand_rfi_dm_cut = 1.5;
         //params->cand_min_members = 3;
 

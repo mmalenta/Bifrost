@@ -1,4 +1,4 @@
-/***stru************************************************************************
+/***************************************************************************
  *
  *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
  *   Licensed under the Academic Free License version 2.1
@@ -425,11 +425,11 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
       		return throw_error_heimdall(error);
     	}
 
-    	if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
+    	//if( beam == 0 && dm_idx == write_dm && first_idx == 0 ) {
       	// TESTING
       	//write_device_time_series(time_series, cur_nsamps,
       	//                         cur_dt, "baselined.tim");
-    	}
+    	//}
     	// -------------------
 
     	// Normalise
@@ -548,33 +548,13 @@ hd_error hd_execute(hd_pipeline pl, hd_size nsamps, hd_size nbits,
 
       stop_timer(filter_timer);
 
-	// WRITE OUT THE NORMALISED TIMESERIES
-
-	/*if ( dm_idx == 1 && filter_width == 1 && first_idx > 6000000)
-	{
-
-
-		std::ofstream norm_data ("norm_data_dm_00197462_samp_6025216.dat", std::ofstream::out | std::ofstream::trunc);
-
-		for (size_t sample = 0; sample < series_stride; sample++)
-			norm_data << sample << " " << pl->d_filtered_series[sample] << endl;
-
-
-		norm_data.close();
-
-		cout << "Normalised data saved...\n";
-		std::cin.get();
-
-
-	}*/
-
-      if( beam == 0 && dm_idx == write_dm && first_idx == 0 &&
-          filter_width == 8 ) {
+      //if( beam == 0 && dm_idx == write_dm && first_idx == 0 &&
+      //    filter_width == 8 ) {
         // TESTING
         //write_device_time_series(filtered_series,
         //                         cur_nsamps_filtered,
         //                         cur_dt, "filtered.tim");
-      }
+      //}
 
       hd_size prev_giant_count = d_giant_peaks.size();
 

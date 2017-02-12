@@ -358,29 +358,10 @@ public:
     	infile.read(reinterpret_cast<char*>(data_temp), input_size);
     	// Set the metadata
 
-/*	cout << *data_temp << " " << *(data_temp + 1) << " " << *(data_temp + 2)
-                << " " << *(data_temp + hdr.nchans) << endl;
-
-	cout << (unsigned char)*data_temp << " " << (unsigned char)*(data_temp + 1) << " " << (unsigned int)*(data_temp + 2)
-                << " " << (unsigned int)*(data_temp + hdr.nchans) << endl;
-
-	unsigned int sum = (unsigned int)(*data_temp + *(data_temp + hdr.nchans));
-
-	unsigned char sum_char = *data_temp + *(data_temp+ hdr.nchans);
-
-	cout << (unsigned char)*data_temp << " "
-		<< (unsigned int)(*data_temp + *(data_temp + hdr.nchans)) << " "
-		<< sum << " " << (unsigned char)sum << endl;
-
-	cout << sum_char << " " << (unsigned int) sum_char;
-
-	cin.get();
-*/
     	this->nchans = hdr.nchans;
     	this->nbits = hdr.nbits;
     	this->fch1 = hdr.fch1;
     	this->foff  = hdr.foff;
-
 
 	const int seconds_in_day = 86400;
 	double mjdstart = hdr.tstart;
@@ -412,11 +393,6 @@ public:
 
       	gregdate.tm_isdst = -1;
       	this->utc_start = mktime (&gregdate);
-
-
-    	std::cout << "The frequency of top channel [MHz]: " << hdr.fch1 << std::endl;
-    	std::cout << "The channel bandwidth [MHz]: " << hdr.foff << std::endl;
-    	std::cout << "The number of channels: " << hdr.nchans << std::endl;
 
     	//averaging the time samples
 
@@ -501,7 +477,6 @@ public:
 
     }
 
-
    	this->nsamps = new_nsamples;
    	this->tsamp  = new_tsamp;
    	this->data   = data_new;
@@ -560,6 +535,7 @@ public:
         thrust::device_vector<double> d_chunk_timesamples_diff_sqr(data_chunk);
         thrust::device_vector<size_t> d_timesample_index(data_chunk * nchans + total_more * nchans);
         thrust::device_vector<double> d_chunk_mean(data_chunk);
+	thrust::device_vector<double> d_mask(total_samps * nchans);
 
         thrust::constant_iterator<double> rec_chunk_start(1.0/(double)data_chunk);
         thrust::constant_iterator<double> rec_chunk_end = rec_chunk_start + nchans;
@@ -567,13 +543,28 @@ public:
         double *full_chunk_mean = new double[chunks_no];
         double *full_chunk_var = new double[chunks_no];
         double *full_chunk_std = new double[chunks_no];
+	double *mask = new double[nchans];
+
+	int mstart = 256;
+        int mend = nchans - 128;
+
+	for (int ii = 0; ii < mstart; ii++)
+		mask[ii] = (double)0.0;
+
+	for (int ii = mstart; ii < mend; ii++)
+		mask[ii] = (double)1.0;
+
+	for (int ii = mend; ii < nchans; ii++)
+		mask[ii] = (double)0.0;
+
+	for (int ii = 0; ii < total_samps; ii++)
+		thrust::copy_n(mask, nchans, d_mask.begin() + ii * nchans);
 
 	// device iterators for thrust::pair
         typedef thrust::device_vector<int>::iterator intIter;
         typedef thrust::device_vector<double>::iterator doubIter;
 
         // generate device_vector used for index transformations
-
         thrust::device_vector<size_t> d_sequence_chunk(nchans);
         thrust::device_vector<size_t> d_total_seq(data_chunk * nchans + total_more * nchans);
 
@@ -590,7 +581,7 @@ public:
         // will need to copy diff_per_chan * (nchans - 1) time samples extra
         // that is diff_per_chan * (nchans - 1) * nchans more in total
 
-
+	// NEED TO COMMENT THIS SECTION PROPERLY!!!!
         for (int chunk_no = 0; chunk_no < chunks_no; chunk_no++)
         {
 
@@ -610,6 +601,12 @@ public:
 		thrust::copy_n(data_new + chunk_no * data_chunk * nchans,
 				total_samps * nchans,
 				d_chunk_to_process.begin());
+
+		thrust::transform(d_chunk_to_process.begin(),
+					d_chunk_to_process.end(),
+					d_mask.begin(),
+					d_chunk_to_process.begin(),
+					thrust::multiplies<double>());
 
                 thrust::device_ptr<double> sample_ptr = d_chunk_to_process.data();
 
@@ -684,6 +681,8 @@ public:
 
                 full_chunk_std[chunk_no] = sqrt(full_chunk_var[chunk_no]);
 
+		cout << full_chunk_mean[chunk_no] << " " << full_chunk_std[chunk_no] << endl;
+
 	}
 	//const double first_mean_diff = front_end_mean_diff[0];
 
@@ -694,7 +693,7 @@ public:
 	//fil_total_mean = full_chunk_mean[0] * nchans;
 
 	cout <<  "Finished processing all chunks...\n";
-	cout << "Will now save\n";
+	/*cout << "Will now save\n";
 
         std::ofstream means_out("means_values_dev.dat", std::ofstream::out | std::ofstream::trunc);
 
@@ -704,7 +703,7 @@ public:
                                 << full_chunk_std[chunk_no] <<  endl;
 
         means_out.close();
-
+        */
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
 
@@ -823,6 +822,7 @@ public:
 	delete [] full_chunk_mean;
 	delete [] full_chunk_var;
 	delete [] full_chunk_std;
+	delete [] mask;
 
 //	delete [] full_chunk_mean_smooth;
 //	delete [] full_chunk_var_smooth;

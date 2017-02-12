@@ -88,10 +88,12 @@ public:
     infile.open(filename.c_str(),std::ifstream::in | std::ifstream::binary);
     ErrorChecker::check_file_error(infile,filename);
     
+    std::cout << "Printing killmask!!" << std::endl;    
     int ii=0;
     while(!infile.eof()&&ii<filterbank.get_nchans()){
       std::getline(infile, str);
       killmask.push_back(std::atoi(str.c_str()));
+      std::cout << killmask[ii] << std::endl;
       ii++;
     }
     
@@ -111,7 +113,7 @@ public:
   {
     size_t max_delay = dedisp_get_max_delay(plan);
     unsigned int out_nsamps = filterbank.get_nsamps()-max_delay;
-    size_t output_size = out_nsamps * dm_list.size();
+    size_t output_size = out_nsamps * dm_list.size();	// * 4 to handle 32-bit output data
     unsigned char* data_ptr = new unsigned char [output_size]; 	// * 2 to handle 16-bit output data
     dedisp_error error = dedisp_execute(plan,
 					filterbank.get_nsamps(),

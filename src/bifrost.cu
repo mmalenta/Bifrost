@@ -64,7 +64,7 @@ struct dedisp_plan_struct {
   std::vector<dedisp_float> delay_table;  // size = nchans
   std::vector<dedisp_bool>  killmask;     // size = nchans
   std::vector<dedisp_size>  scrunch_list; // size = dm_count
-  // Device arrays //NEW: one for each GPU 
+  // Device arrays //NEW: one for each GPU
   std::vector< thrust::device_vector<dedisp_float> > d_dm_list;
   std::vector< thrust::device_vector<dedisp_float> > d_delay_table;
   std::vector< thrust::device_vector<dedisp_bool> >  d_killmask;
@@ -91,7 +91,7 @@ public:
     			count = trials.get_count();
     			pthread_mutex_init(&mutex, NULL);
   	}
-  
+
   	void enable_progress_bar(){
     		progress = new ProgressBar();
     		use_progress_bar = true;
@@ -118,7 +118,7 @@ public:
     pthread_mutex_unlock(&mutex);
     return retval;
   }
-  
+
   ~DMDispenser(){
     if (use_progress_bar)
       delete progress;
@@ -135,14 +135,14 @@ private:
   unsigned int size;
   int device;
   std::map<std::string,Stopwatch> timers;
-  
+
 public:
   CandidateCollection dm_trial_cands;
 
-  Worker(DispersionTrials<unsigned char>& trials, DMDispenser& manager, 
+  Worker(DispersionTrials<unsigned char>& trials, DMDispenser& manager,
 	 AccelerationPlan& acc_plan, CmdLineOptions& args, unsigned int size, int device)
     :trials(trials),manager(manager),acc_plan(acc_plan),args(args),size(size),device(device){}
-  
+
   void start(void)
   {
     //Generate some timer instances for benchmarking
@@ -163,6 +163,7 @@ public:
     CuFFTerC2R c2rfft(size);
     float tobs = size*trials.get_tsamp();
     float bin_width = 1.0/tobs;
+	cout << "Bin width = " << bin_width << "Hz" << endl;
     DeviceFourierSeries<cufftComplex> d_fseries(size/2+1,bin_width);
     DedispersedTimeSeries<unsigned char> tim;
     ReusableDeviceTimeSeries<float,unsigned char> d_tim(size);
@@ -254,33 +255,33 @@ public:
 
       for (int jj=0;jj<acc_list.size();jj++){
 	    //if (args.verbose)
-	    //  std::cout << "Resampling to "<< acc_list[jj] << " m/s/s" << std::endl;
+	    std::cout << "Resampling to "<< acc_list[jj] << " m/s/s" << std::endl;
 	    resampler.resample(d_tim,d_tim_r,size,acc_list[jj]);
 
 	    //if (args.verbose)
-	    //  std::cout << "Execute forward FFT" << std::endl;
+	    std::cout << "Execute forward FFT" << std::endl;
 	    r2cfft.execute(d_tim_r.get_data(),d_fseries.get_data());
 
 	    //if (args.verbose)
-	    //  std::cout << "Form interpolated power spectrum" << std::endl;
+	    std::cout << "Form interpolated power spectrum" << std::endl;
 	    former.form_interpolated(d_fseries,pspec);
 
 	    //if (args.verbose)
-	    //  std::cout << "Normalise power spectrum" << std::endl;
+	    std::cout << "Normalise power spectrum" << std::endl;
 	    stats::normalise(pspec.get_data(),mean*size,std*size,size/2+1);
 
 	    //if (args.verbose)
-	    //  std::cout << "Harmonic summing" << std::endl;
+	    std::cout << "Harmonic summing" << std::endl;
 	    harm_folder.fold(pspec);
 
 	    //if (args.verbose)
-	    //  std::cout << "Finding peaks" << std::endl;
+	    std::cout << "Finding peaks" << std::endl;
 	    SpectrumCandidates trial_cands(tim.get_dm(),ii,acc_list[jj]);
 	    cand_finder.find_candidates(pspec,trial_cands);
 	    cand_finder.find_candidates(sums,trial_cands);
 
 	    //if (args.verbose)
-	    //  std::cout << "Distilling harmonics" << std::endl;
+	    std::cout << "Distilling harmonics" << std::endl;
 	      accel_trial_cands.append(harm_finder.distill(trial_cands.cands));
       }
 	  POP_NVTX_RANGE
@@ -316,12 +317,6 @@ int main(int argc, char* argv[])
 	timers["pulsar"]	= Stopwatch();
 	timers["single_pulse"] 	= Stopwatch();
   	timers["total"].start();
-
-	cout << "##########################################" << endl;
-	cout << "THIS IS A DEVELOPMENT VERSION!!" << endl;
-	cout << "DO NOT USE AS A PART OF REGULAR PIPELINE!!" << endl;
-	cout << "##########################################" << endl << endl;
-
 
 	CmdLineOptions args;
 	if (!read_cmdline_options(args,argc,argv))
@@ -442,38 +437,6 @@ int main(int argc, char* argv[])
 	size_t output_size = output_samps * dm_size;
 
 	unsigned char *timeseries_data_ptr = trials.get_data();
-
-
-	// print out first and last 262144 time samples
-	// will amount to total of around 64 seconds of GHRSS data
-	// REMEMBER - data is DM-major
-
-	/*
-
-	std::string file_out;
-	std::ostringstream oss;
-
-	for (size_t dm_try = 0; dm_try < dm_size; dm_try++) {
-
-		oss.str("");
-
-		oss << dm_try;
-
-		size_t dm_start = dm_try * output_samps;
-		file_out = "DM" + oss.str() + ".dat"; 
-
-		std::ofstream to_save(file_out.c_str());
-
-		for (size_t sample = 0; sample < 262144; sample++)
-			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
-
-		for (size_t sample = output_samps - 262144; sample < output_samps; sample++)
-			to_save << (unsigned int)timeseries_data_ptr[dm_start + sample] << endl;
-
-		to_save.close();
-	}
-
-	*/
 
 	dedisp_plan original_plan = dedisperser.get_dedispersion_plan();
 
@@ -634,7 +597,7 @@ int main(int argc, char* argv[])
 		params.dm_nbits = 8;				// number of bits per dedispersed sample
 		params.use_scrunching = false;
 		params.gpu_id = args.gpu_ids[0]; 		// need to work on this to enable multi-GPU support
-		params.detect_thresh = 6.0;
+		params.detect_thresh = 10.0;
 		params.f0 = filobj.get_fch1();
 		params.df = filobj.get_foff();
 		params.dt = filobj.get_tsamp();

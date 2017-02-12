@@ -409,7 +409,8 @@ int device_find_peaks(int n, int start_index, float * d_dat,
   //apply execution policy to get some speed up
   int num_copied = thrust::copy_if(thrust::cuda::par(policy), zipped_iter, zipped_iter+n-start_index,
 				   zipped_out_iter,greater_than_threshold(thresh)) - zipped_out_iter;
-  thrust::copy(d_index.begin(),d_index.begin()+num_copied,indexes);
+  	std::cout << "num_copied = " << num_copied << std::endl;
+	thrust::copy(d_index.begin(),d_index.begin()+num_copied,indexes);
   thrust::copy(d_snrs.begin(),d_snrs.begin()+num_copied,snrs);
   ErrorChecker::check_cuda_error("Error from device_find_peaks;");
   return(num_copied);
